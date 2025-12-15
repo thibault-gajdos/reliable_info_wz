@@ -147,7 +147,6 @@ exp6_clean = Button0Blue_flip(exp6_clean)
 
 response_idx = which(exp6_clean$Task=='response')
 
-
 results = lapply(exp6_clean$Stimulus.Info[response_idx], function(txt) {
   d = fromJSON(txt)
   blue_rel = ifelse(d$color == "blue", d$reliability, 1 - d$reliability)
@@ -200,8 +199,6 @@ exp6_clean$Experiment.Name = Experiment.Name
 exp6_clean$Done.by = 'Exp6'
 
 data_clean = rbind(alex_clean, divyaj_clean, exp6_clean)
-
-
 
 
 
@@ -328,108 +325,6 @@ for (i in 1:nrow(performance)) {
   
 }
 
-
-######## clean up workspace
-rm(list = setdiff(ls(), c('data_processed','df_participant_experiment','performance')))
-
-
-####### Visualize
-par(mfrow = c(1, 3), oma = c(0, 0, 3, 0))
-
-plot_performance = function(df_performance, exp_done.by, second_plot){
-  plot_df = df_performance[which(df_performance$Done.by==exp_done.by),]
-  plot_df = plot_df[order(plot_df$Accuracy),]
-  
-  plot(plot_df$Accuracy,
-       type = "p",
-       pch = 19,
-       xlab = "Index (sorted)",
-       ylab = "Performance",
-       ylim = c(0.4,1),
-       main = exp_done.by)
-  if (second_plot == 'BDT'){
-    points(plot_df$BDT_accuracy,
-       type = "p",
-       pch = 0)
-    abline(h = mean(plot_df$BDT_accuracy), col = 'gray')
-  }else{
-    plot_df = plot_df[order(plot_df$Optimal_Choice),]
-    points(plot_df$Optimal_Choice,
-           type = "p",
-           pch = 1)
-    abline(h = mean(plot_df$Optimal_Choice), col = 'gray')
-  }
-
-  abline(h = mean(plot_df$Accuracy))
-}
-
-# plot_performance(performance, 'Exp1', 'BDT')
-plot_performance(performance, 'Exp6', 'BDT')
-plot_performance(performance, 'Alex', 'BDT')
-plot_performance(performance, 'Divyaj', 'BDT')
-
-
-mtext("Participants vs. BDT", outer = TRUE, cex = 1.5, font = 2)
-
-### Optimal Choices vs. Correct Choices
-
-par(mfrow = c(1, 3), oma = c(0, 0, 3, 0))
-
-# plot_performance(performance, 'Exp1', 'Optimal')
-plot_performance(performance, 'Exp6', 'Optimal')
-plot_performance(performance, 'Alex', 'Optimal')
-plot_performance(performance, 'Divyaj', 'Optimal')
-
-mtext("Correct Choices vs. Optimal Choices", outer = TRUE, cex = 1.5, font = 2)
-
-#### stats of performance
-
-
-## confirm normality
-
-shapiro.test(performance$Accuracy[performance$Done.by=='Exp6'])
-shapiro.test(performance$Accuracy[performance$Done.by=='Alex'])
-shapiro.test(performance$Accuracy[performance$Done.by=='Divyaj'])
-
-shapiro.test(performance$BDT_accuracy[performance$Done.by=='Exp6'])
-shapiro.test(performance$BDT_accuracy[performance$Done.by=='Alex'])
-shapiro.test(performance$BDT_accuracy[performance$Done.by=='Divyaj'])
-
-## accuracy and BDT accuracy are normally distributed
-performance$Done.by = as.factor(performance$Done.by)
-
-fit = aov(Accuracy ~ Done.by, data = performance)
-summary(fit)
-TukeyHSD(fit)
-
-fit = aov(BDT_accuracy ~ Done.by, data = performance)
-summary(fit)
-TukeyHSD(fit)
-
-
-kruskal.test(Optimal_Choice ~ Done.by, data = performance)
-library(FSA)
-dunnTest(Optimal_Choice ~ Done.by, data = performance, method = "bonferroni")
-
-
-shapiro.test(performance$Optimal_Choice[performance$Done.by=='Exp6'])
-shapiro.test(performance$Optimal_Choice[performance$Done.by=='Alex'])
-shapiro.test(performance$Optimal_Choice[performance$Done.by=='Divyaj'])
-
-# ggplot(performance, aes(x = Optimal_Choice, fill = Done.by)) +
-#   geom_histogram(alpha = 0.5, position = "identity", bins = 8) +
-#   labs(title = "Histogram of Performance",
-#        x = "proportions of optimal choice",
-#        y = "Count") +
-#   theme_minimal()
-
-
-######## clean up workspace
-rm(list = setdiff(ls(), c('data_processed','df_participant_experiment','performance')))
-
-
-
-
 ####### Likelihood of choosing the blue option vs. the net number of samples for blue or red
 
 likelihood_blue = data.frame(df_participant_experiment)
@@ -524,6 +419,15 @@ likelihood_final$P_BDT_blue = likelihood_final$Blue_BDT_choice/likelihood_final$
 ######## clean up workspace
 rm(list = setdiff(ls(), c('data_processed','df_participant_experiment','performance','likelihood_blue','likelihood_final')))
 
+save(data_processed, file = './results/data_preprocessed.rdata')
+save(performance, file = './results/performance.rdata')
+
+
+
+
+
+
+########  the rest are not the most essential code for analysis and preprocessing  ########
 ######## check likelihood by participants
 library(ggplot2)
 
@@ -592,233 +496,7 @@ ggplot(na.omit(data_to_fit), aes(Net_blue, P_BDT_blue, colour = Reliability)) +
   geom_line() +
   coord_cartesian(xlim =c(-3, 3), ylim = c(0, 1))
 
-####### Visualize fitted probability vs. Net number of square favoring blue
-library(lme4)
-library(sjPlot)
 
-data_processed$Done.by = as.factor(data_processed$Done.by)
-data_processed$Response = as.numeric(data_processed$Response)
-data_processed$Optimalchoice = as.numeric(data_processed$Optimalchoice)
 
-
-
-data_to_fit = rbind(data_processed[data_processed$Done.by=='Exp6',],data_processed[data_processed$Done.by!='Exp6',])
-data_to_fit$Done.by = relevel(data_to_fit$Done.by, ref = "Exp6")
-# data_to_fit = data_processed # somehow this has a convergence issue
-model = glmer(Response ~ (1 | Participant.Private.ID) + Done.by * Net.Blue.50 + Done.by * Net.Blue.55 + Done.by * Net.Blue.65, data = data_to_fit, family = binomial)
-
-model <- glmer(
-  Response ~ (1 | Participant.Private.ID) +
-    Done.by * Net.Blue.50 +
-    Done.by * Net.Blue.55 +
-    Done.by * Net.Blue.65,
-  data = data_to_fit,
-  family = binomial,
-  control = glmerControl(optimizer = "bobyqa",
-                         optCtrl = list(maxfun = 2e5))
-)
-
-
-
-
-summary(model)
-
-plot_model(model, type = "pred", terms = c("Net.Blue.50","Done.by"), axis.lim = c(0, 1))
-plot_model(model, type = "pred", terms = c("Net.Blue.55","Done.by"), axis.lim = c(0, 1))
-plot_model(model, type = "pred", terms = c("Net.Blue.65","Done.by"), axis.lim = c(0, 1))
-
-p.50 <- plot_model(model, type = "pred", terms = c("Net.Blue.50","Done.by"), axis.lim = c(0, 1))
-p.55 <- plot_model(model, type = "pred", terms = c("Net.Blue.55","Done.by"), axis.lim = c(0, 1))
-p.65 <- plot_model(model, type = "pred", terms = c("Net.Blue.65","Done.by"), axis.lim = c(0, 1))
-
-
-pred.s1.prob = p.50[["data"]][["predicted"]]
-pred.s1.se = p.50[["data"]][["std.error"]]
-pred.s1.conf.low = p.50[["data"]][["conf.low"]]
-pred.s1.conf.high = p.50[["data"]][["conf.high"]]
-pred.s1.x = p.50[["data"]][["x"]]
-pred.s1.group = p.50[["data"]][["group"]]
-
-pred.s2.prob = p.55[["data"]][["predicted"]]
-pred.s2.se = p.55[["data"]][["std.error"]]
-pred.s2.conf.low = p.55[["data"]][["conf.low"]]
-pred.s2.conf.high = p.55[["data"]][["conf.high"]]
-pred.s2.x = p.55[["data"]][["x"]]
-pred.s2.group = p.55[["data"]][["group"]]
-
-pred.s3.prob = p.65[["data"]][["predicted"]]
-pred.s3.se = p.65[["data"]][["std.error"]]
-pred.s3.conf.low = p.65[["data"]][["conf.low"]]
-pred.s3.conf.high = p.65[["data"]][["conf.high"]]
-pred.s3.x = p.65[["data"]][["x"]]
-pred.s3.group = p.65[["data"]][["group"]]
-
-
-
-
-
-
-
-# data_to_fit = data_processed
-data_to_fit = data_to_fit
-
-model.BDT = glmer(Optimalchoice ~ (1 | Participant.Private.ID) + Done.by * Net.Blue.50 + Done.by * Net.Blue.55 + Done.by * Net.Blue.65, data = data_to_fit, family = binomial)
-# model.BDT = glmer(Optimalchoice ~ (1 | Participant.Private.ID) + Net.Blue.50 + Net.Blue.55 + Net.Blue.65, data = data_to_fit, family = binomial)
-
-# no random variable
-# model.BDT <- glm(Optimalchoice ~ Done.by * Net.Blue.50 + Done.by * Net.Blue.55 + Done.by * Net.Blue.65,
-#                    data = data_to_fit, family = binomial)
-
-# model.BDT <- glm(Optimalchoice ~ Net.Blue.50 + Net.Blue.55 + Net.Blue.65,
-#                  data = data_to_fit, family = binomial)
-
-
-summary(model.BDT)
-
-plot_model(model.BDT, type = "pred", terms = c("Net.Blue.50","Done.by"), axis.lim = c(0, 1))
-plot_model(model.BDT, type = "pred", terms = c("Net.Blue.55","Done.by"), axis.lim = c(0, 1))
-plot_model(model.BDT, type = "pred", terms = c("Net.Blue.65","Done.by"), axis.lim = c(0, 1))
-
-plot_model(model.BDT, type = "pred", terms = c("Net.Blue.50"), axis.lim = c(0, 1))
-plot_model(model.BDT, type = "pred", terms = c("Net.Blue.55"), axis.lim = c(0, 1))
-plot_model(model.BDT, type = "pred", terms = c("Net.Blue.65"), axis.lim = c(0, 1))
-
-tab <- with(data_to_fit, table(Net.Blue.50, Net.Blue.55, Net.Blue.65, Optimalchoice))
-tab
-
-
-
-
-
-
-####### prediction and visualization
-library(tidyr)
-
-# Range for sweeping predictor
-blue_range = c(-6:6)
-
-# Two experiment levels
-Done_by = c("Alex", "Divyaj","Exp1")
-
-# Create data grid for each Net.Blue variable
-new_dat <- expand.grid(
-  Net.Blue.50 = 0,
-  Net.Blue.55 = 0,
-  Net.Blue.65 = 0,
-  Done.by = Done_by,
-  Var = c("Net.Blue.50", "Net.Blue.55", "Net.Blue.65"),  # to identify which is being swept
-  x = blue_range
-)
-
-# For each row, assign the sweeping variable's value
-new_dat <- new_dat %>%
-  mutate(
-    Net.Blue.50 = ifelse(Var == "Net.Blue.50", x, Net.Blue.50),
-    Net.Blue.55 = ifelse(Var == "Net.Blue.55", x, Net.Blue.55),
-    Net.Blue.65 = ifelse(Var == "Net.Blue.65", x, Net.Blue.65)
-  )
-
-new_dat_BDT = new_dat
-
-new_dat$pred_logit <- predict(model, newdata = new_dat, re.form = NA)  # fixed effects only
-
-new_dat$pred_prob <- plogis(new_dat$pred_logit)
-
-
-new_dat_BDT$pred_logit <- predict(model.BDT, newdata = new_dat_BDT, re.form = NA)  # fixed effects only
-new_dat_BDT$pred_prob <- plogis(new_dat_BDT$pred_logit)
-
-
-### try predicting CI
-
-
-# Function to generate fitted values for bootstrap
-pred_fun <- function(fit) {
-  plogis(predict(fit, newdata = new_dat, re.form = NA))
-}
-
-# Parametric bootstrap
-set.seed(123)
-boot_res <- bootMer(model, FUN = pred_fun, nsim = 20)
-
-# 95% intervals for each row of new_dat
-new_dat$pred_low  <- apply(boot_res$t, 2, quantile, 0.025)
-new_dat$pred_high <- apply(boot_res$t, 2, quantile, 0.975)
-
-
-###
-
-new_dat <- new_dat %>%
-  rename(Net_blue = x,
-         Reliability = Var,
-         P_blue = pred_prob)  # rename the "Var" column to "P_blue"
-
-new_dat <- new_dat %>%
-  mutate(
-    Reliability = gsub("Net\\.Blue\\.", "", Reliability),  # remove the text part
-    Reliability = as.numeric(Reliability)
-  )
-
-new_dat_long <- new_dat %>%
-  select(Done.by, Net_blue, Reliability, P_blue)
-
-
-new_dat_BDT <- new_dat_BDT %>%
-  rename(Net_blue = x,
-         Reliability = Var,
-         P_blue = pred_prob)  # rename the "Var" column to "P_blue"
-
-new_dat_BDT <- new_dat_BDT %>%
-  mutate(
-    Reliability = gsub("Net\\.Blue\\.", "", Reliability),  # remove the text part
-    Reliability = as.numeric(Reliability)
-  )
-
-new_dat_BDT_long <- new_dat_BDT %>%
-  select(Done.by, Net_blue, Reliability, P_blue)
-
-#######
-
-
-ggplot(new_dat_long[which(new_dat_long$Done.by=='Alex'),], aes(Net_blue, P_blue, colour = as.factor(Reliability))) +
-  # geom_point() +
-  geom_line() +
-  coord_cartesian(xlim =c(-6, 6), ylim = c(0, 1))
-
-
-ggplot(new_dat_long[which(new_dat_long$Done.by=='Divyaj'),], aes(Net_blue, P_blue, colour = as.factor(Reliability))) +
-  # geom_point() +
-  geom_line() +
-  coord_cartesian(xlim =c(-6, 6), ylim = c(0, 1))
-
-
-ggplot(new_dat_long[which(new_dat_long$Done.by=='Exp1'),], aes(Net_blue, P_blue, colour = as.factor(Reliability))) +
-  # geom_point() +
-  geom_line() +
-  coord_cartesian(xlim =c(-6, 6), ylim = c(0, 1))
-
-
-
-
-ggplot(new_dat_BDT_long[which(new_dat_BDT_long$Done.by=='Alex'),], aes(Net_blue, P_blue, colour = as.factor(Reliability))) +
-  # geom_point() +
-  geom_line() +
-  coord_cartesian(xlim =c(-6, 6), ylim = c(0, 1))
-
-
-ggplot(new_dat_BDT_long[which(new_dat_BDT_long$Done.by=='Divyaj'),], aes(Net_blue, P_blue, colour = as.factor(Reliability))) +
-  # geom_point() +
-  geom_line() +
-  coord_cartesian(xlim =c(-6, 6), ylim = c(0, 1))
-
-
-ggplot(new_dat_BDT_long[which(new_dat_BDT_long$Done.by=='Exp1'),], aes(Net_blue, P_blue, colour = as.factor(Reliability))) +
-  # geom_point() +
-  geom_line() +
-  coord_cartesian(xlim =c(-6, 6), ylim = c(0, 1))
-
-
-
-print(new_dat_BDT_long[which(new_dat_BDT_long$Done.by=='Exp1'),])
 
 
