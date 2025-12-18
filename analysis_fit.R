@@ -1,40 +1,27 @@
 library(readr)
+library(ggplot2)
 
 # chosen_exp = 'Alex'
-# chosen_exp = 'Divyaj'
-chosen_exp = 'Exp6'
+chosen_exp = 'Divyaj'
+# chosen_exp = 'Exp6'
 
 
 
 # fit_log_basic = read_rds(paste('./results/',chosen_exp,'/log_basic.rds', sep = ''), refhook = NULL)
 fit_log_seq = read_rds(paste('./results/',chosen_exp,'/log_seq.rds', sep = ''), refhook = NULL)
 
-load(paste("./results/", chosen_exp, "/loo/loo_log_basic.rdata", sep = '')) 
-loo_log_basic = loo
-
-# load(paste("./results/", chosen_exp, "/loo/loo_basic.rdata", sep = '')) 
-# loo_basic = loo
-
-load(paste("./results/", chosen_exp, "/loo/loo_basic_seq.rdata", sep = '')) 
-loo_basic_seq = loo
-
-load(paste("./results/", chosen_exp, "/loo/loo_log_seq.rdata", sep = '')) 
-loo_log_seq = loo
-
-
-# loo_basic$estimates
-loo_basic_seq$estimates
-loo_log_basic$estimates
-loo_log_seq$estimates
+fit_log_basic = read_rds(paste('./results/',chosen_exp,'/log_seq.rds', sep = ''), refhook = NULL)
 
 #### extract the fit
 
 ########
 
-library(ggplot2)
-
 # Extract posterior samples
-post <- rstan::extract(fit_log_seq)
+if(chosen_exp =='Divyaj'){
+  post <- rstan::extract(fit_log_basic)
+}else{
+  post <- rstan::extract(fit_log_seq)
+}
 
 # Participant-level posterior means
 a_mean <- apply(post$alpha, 2, mean)
