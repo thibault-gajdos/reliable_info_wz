@@ -240,11 +240,12 @@ library(patchwork)
 ################################################
 ## Slider response vs. Net congruent evidence ##
 ################################################
+load('./results/data_preprocessed.rdata')
 
 rm(list=setdiff(ls(), "data_processed"))
 
-chosen_exp = 'Alex'
-# chosen_exp = 'Divyaj'
+# chosen_exp = 'Alex'
+chosen_exp = 'Divyaj'
 # chosen_exp = 'Exp6'
 
 
@@ -261,18 +262,22 @@ data$Net.Cong.65[which(data$Response==0)] = 0 - data$Net.Cong.65[which(data$Resp
 
 data$slider_response = as.numeric(data$slider_response)-50
 
-
+data$slider_reliability = as.factor(data$slider_reliability)
+data$Participant.Private.ID = as.factor(data$Participant.Private.ID)
 
 
 library(lme4)
 
-lm.slider = lmer(slider_response ~ (1 | Participant.Private.ID) + slider_reliability * Net.Cong.50 + slider_reliability * Net.Cong.55 + slider_reliability * Net.Cong.65, data = data)
 
+
+lm.slider = lmer(slider_response ~  (1 | Participant.Private.ID) + slider_reliability * Net.Cong.50 + slider_reliability * Net.Cong.55 + slider_reliability * Net.Cong.65, data = data)
+
+summary(lm.slider)
 library(sjPlot)
 
-plot_model(lm.slider, type = "pred", terms = c("Net.Cong.50","slider_reliability"), axis.lim = c(-50, 50))
-plot_model(lm.slider, type = "pred", terms = c("Net.Cong.55","slider_reliability"), axis.lim = c(-50, 50))
-plot_model(lm.slider, type = "pred", terms = c("Net.Cong.65","slider_reliability"), axis.lim = c(-50, 50))
+# plot_model(lm.slider, type = "pred", terms = c("Net.Cong.50","slider_reliability"), axis.lim = c(-50, 50))
+# plot_model(lm.slider, type = "pred", terms = c("Net.Cong.55","slider_reliability"), axis.lim = c(-50, 50))
+# plot_model(lm.slider, type = "pred", terms = c("Net.Cong.65","slider_reliability"), axis.lim = c(-50, 50))
 
 
 p.50 <- plot_model(lm.slider, type = "pred", terms = c("Net.Cong.50","slider_reliability"), axis.lim = c(-50, 50))
