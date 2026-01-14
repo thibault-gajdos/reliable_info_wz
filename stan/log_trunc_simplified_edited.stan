@@ -16,7 +16,8 @@ functions {
                  array[,,] int color,
                  array[,,] real proba,
                  array[,] int choice,
-                 matrix param_raw){
+                 matrix param_raw,
+                 real l_obs){
     real lp = 0;
     for (i in 1:size(slice_indices)) {
       int n = slice_indices[i];
@@ -49,7 +50,7 @@ functions {
   }
 
   vector compute_evidence(int sample_size, array[] int color_data, array[] real proba_data, 
-                          real alpha, real beta, real lambda, real theta, real psi) {
+                          real alpha, real beta, real lambda, real theta, real psi, real l_obs) {
     vector[2] evidence = rep_vector(0.0, 2);
 
     for (s in 1:sample_size) {
@@ -62,8 +63,8 @@ functions {
   }
 
   real compute_log_lik(int sample_size, array[] int color_data, array[] real proba_data, 
-                       int choice, real alpha, real beta, real lambda, real theta, real psi) {
-    vector[2] evidence = compute_evidence(sample_size, color_data, proba_data, alpha, beta, lambda, theta, psi);
+                       int choice, real alpha, real beta, real lambda, real theta, real psi, real l_obs) {
+    vector[2] evidence = compute_evidence(sample_size, color_data, proba_data, alpha, beta, lambda, theta, psi, l_obs);
     vector[2] evidence_safe = clamp_vector(evidence, -100, 100);
     return categorical_lpmf(choice | softmax(theta*evidence_safe));
   }
@@ -104,7 +105,7 @@ model {
   // Use reduce_sum for parallelization
  target += reduce_sum(partial_sum, indices, grainsize,
                      mu_pr, sigma_pr,
-                     Tsubj, sample, color, proba, choice, param_raw);
+                     Tsubj, sample, color, proba, choice, param_raw, l_obs);
 }
 
 generated quantities {
@@ -137,13 +138,13 @@ generated quantities {
       }
 
       vector[2] evidence = compute_evidence(sample[n, t], color_trial, proba_trial,
-                                            params[n, 1], params[n, 2], params[n, 3], params[n, 4], params[n, 5]);
+                                            params[n, 1], params[n, 2], params[n, 3], params[n, 4], params[n, 5], l_obs);
       vector[2] evidence_safe = clamp_vector(evidence, -100, 100);
       vector[2] prob = softmax(params[n,4]*evidence_safe);
       y_pred[n, t] = categorical_rng(prob);
       log_lik[k] = compute_log_lik(sample[n, t], color_trial, proba_trial,
                                    choice[n, t],
-                                   params[n, 1], params[n, 2], params[n, 3], params[n, 4], params[n, 5]);
+                                   params[n, 1], params[n, 2], params[n, 3], params[n, 4], params[n, 5], l_obs);
     }
   }
 }
