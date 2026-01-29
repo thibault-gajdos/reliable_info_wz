@@ -1,15 +1,9 @@
 library(readr)
 library(ggplot2)
 
-chosen_exp = 'Alex'
+# chosen_exp = 'Alex'
 # chosen_exp = 'Divyaj'
-# chosen_exp = 'Exp6'
-
-
-
-fit_log_seq = read_rds(paste('./results/',chosen_exp,'/log_seq.rds', sep = ''), refhook = NULL)
-
-fit_log_basic = read_rds(paste('./results/',chosen_exp,'/log_basic.rds', sep = ''), refhook = NULL)
+chosen_exp = 'Exp6'
 
 #### extract the fit
 
@@ -17,9 +11,11 @@ fit_log_basic = read_rds(paste('./results/',chosen_exp,'/log_basic.rds', sep = '
 
 # Extract posterior samples
 if(chosen_exp =='Divyaj'){
-  post <- rstan::extract(fit_log_basic)
+  fit = read_rds(paste('./results/',chosen_exp,'/log_basic.rds', sep = ''), refhook = NULL)
+  post <- rstan::extract(fit)
 }else{
-  post <- rstan::extract(fit_log_seq)
+  fit = read_rds(paste('./results/',chosen_exp,'/log_seq.rds', sep = ''), refhook = NULL)
+  post <- rstan::extract(fit)
 }
 
 # Participant-level posterior means
@@ -56,6 +52,7 @@ phi <- function(p, a, gamma) {
 
 distorted <- phi(p_grid, a_g, gamma_g)
 
+
 phi(0.5, a_g, gamma_g)
 
 df <- data.frame(
@@ -63,17 +60,65 @@ df <- data.frame(
   distorted = distorted * 100
 )
 
+
+highlight <- data.frame(
+  p = c(0.5, 0.55, 0.65)
+)
+
+highlight$distorted <- phi(highlight$p, a_g, gamma_g)
+highlight$p = highlight$p*100
+highlight$distorted = highlight$distorted*100
+
+
+
 ggplot(df, aes(x = p, y = distorted)) +
-  geom_line(size = 1.3, color = "#0072B2") +
+  # main sigmoid curve
+  geom_line(linewidth = 1.6, colour = "black") +
+  # identity line
   geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
-  labs(
-    title = chosen_exp,
-    x = "Objective reliability (%)",
-    y = "Subjective reliability (%)"
+  # vertical guide lines
+  geom_segment(
+    data = highlight,
+    aes(x = p, xend = p, y = 0, yend = distorted, col = '#F2F2F2'),
+    linewidth = 0.6
   ) +
-  scale_x_continuous(limits = c(0, 100)) +
-  scale_y_continuous(limits = c(0, 100)) +
-  theme_minimal(base_size = 15)
+  # horizontal guide lines
+  geom_segment(
+    data = highlight,
+    aes(x = 0, xend = p, y = distorted, yend = distorted, col = '#F2F2F2'),
+    linewidth = 0.6
+  ) +
+  # highlighted points
+  geom_point(
+    data = highlight,
+    aes(colour = factor(p)),
+    size = 5
+  ) +
+  scale_colour_manual(
+    values = c("50" = "#0099FF",
+               "55" = "#00CC33",
+               "65" = "#009933")
+  ) +
+  scale_x_continuous(
+    limits = c(0, 100), breaks = c(0, 50, 55, 65, 100),
+    expand = c(0, 1)
+  ) +
+  scale_y_continuous(
+    limits = c(0, 100), breaks = c(0, 50, 65, 80, 100),
+    expand = c(0, 1)
+  )+
+  labs(
+    x = "Reliability",
+    y = "Distorted reliability"
+  ) +
+  theme_classic(base_size = 15) +
+  theme(
+    legend.position = "none",
+    axis.line = element_line(linewidth = 0.5),
+    axis.ticks = element_line(linewidth = 1),
+    axis.ticks.length = unit(6, "pt")
+  )
+
 
 ##### plot w
 df <- data.frame(
@@ -81,15 +126,40 @@ df <- data.frame(
   weights = w_g
 )
 
-ggplot(df, aes(x = no.seq, y = weights)) + 
+ggplot(df, aes(x = no.seq, y = weights)) +
+  # 1. Add vertical lines from the x-axis to the points
+  geom_segment(aes(xend = no.seq, yend = 0.5), color = "grey70") +
+  # 2. Add the main line
   geom_line(size = 1.3) +
+  # 3. Add the large circular points
+  geom_point(size = 5, color = "grey50") +
+  # 4. Add the horizontal dashed reference line at y = 1.0
+  geom_hline(yintercept = 1.0, linetype = "dashed", color = "grey30") +
   labs(
-    title = chosen_exp,
-    x = "Order in the sequence",
-    y = "Sequential weights"
+    x = NULL, # The second image removes the x-axis title
+    y = NULL  # The second image removes the y-axis title
   ) +
-  scale_x_continuous(limits = c(1, 6)) +
-  scale_y_continuous(limits = c(0.5, 1.1))
+  # 5. Define discrete-like labels for the continuous x-axis
+  scale_x_continuous(
+    breaks = 1:6, 
+    labels = c("1st", "2nd", "3rd", "4th", "5th", "6th"),
+    limits = c(0.8, 6.2), # Add a little padding on the sides
+    expand = c(0, 0)
+  ) +
+  # 6. Set y-axis limits and breaks
+  scale_y_continuous(
+    breaks = seq(0.6, 1.1, by = 0.1),
+    limits = c(0.55, 1.1),
+    expand = c(0, 0)
+  ) +
+  # 7. Apply a clean theme and remove the grid
+  theme_classic() +
+  theme(
+    axis.line = element_line(size = 0.8),
+    axis.ticks = element_line(size = 0.8),
+    axis.text = element_text(color = "black", size = 12),
+    plot.title = element_blank() # Removing title to match the goal image
+  )
 
 
 ##########################################################
@@ -179,22 +249,6 @@ df_all = rbind(df50, df55, df65)
 
 my_colors = c('#0099FF', '#00CC33', '#009933')
 
-ggplot(df50, aes(distorted_reliability, slope_))+
-  geom_point() +
-  scale_y_continuous(limits = c(-10, 15)) +
-  scale_x_continuous(limits = c(0, 100))
-
-ggplot(df55, aes(distorted_reliability, slope_))+
-  geom_point() +
-  scale_y_continuous(limits = c(-10, 15)) +
-  scale_x_continuous(limits = c(0, 100))
-
-ggplot(df65, aes(distorted_reliability, slope_))+
-  geom_point() +
-  scale_y_continuous(limits = c(-10, 15)) +
-  scale_x_continuous(limits = c(0, 100))
-
-
 ggplot(df_all, aes(distorted_reliability, slope_, col = reliability))+
   geom_point() +
   scale_color_manual(values = my_colors) +
@@ -205,4 +259,113 @@ ggplot(df_all, aes(distorted_reliability, slope_, col = reliability))+
        y = "Slope of introspective reports",
        color = "Reliability") +
   theme_bw()
-  
+
+
+library(patchwork)
+#################  50
+
+fit <- lm(slope_ ~ I(distorted_reliability^2), data = df50)
+
+grid <- data.frame(distorted_reliability = seq(min(df50$distorted_reliability), max(df50$distorted_reliability), length.out = 20))
+preds <- predict(fit, newdata = grid, interval = "confidence")
+plot_data <- cbind(grid, preds)
+
+
+plot.50 = ggplot(df50, aes(distorted_reliability, slope_)) +
+  geom_point(shape = 21, fill = "#0099FF", size = 1) +
+  # The mean prediction line
+  geom_line(data = plot_data, aes(y = fit), color = "red", size = 1) +
+  # The dashed confidence interval lines
+  geom_line(data = plot_data, aes(y = lwr), color = "red", linetype = "dashed") +
+  geom_line(data = plot_data, aes(y = upr), color = "red", linetype = "dashed") +
+  # Reference lines and styling
+  scale_x_continuous(
+    limits = c(0, 100),
+    expand = c(0.005, 0.005)
+  ) +
+  scale_y_continuous(
+    limits = c(-10, 20),
+    expand = c(0.005, 0.005)
+  )+
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey") +
+  geom_vline(xintercept = 50, linetype = "dashed", color = "grey") +
+  theme_classic() +
+  labs(title = chosen_exp,
+       x = "Distorted reliability of 50% reliable sources",
+       y = "Slope of introspective reports")
+  labs(title = chosen_exp, 
+       x = " ", 
+       y = " ")
+
+###############  55
+
+fit <- lm(slope_ ~ I(distorted_reliability^2), data = df55)
+
+grid <- data.frame(distorted_reliability = seq(min(df55$distorted_reliability), max(df55$distorted_reliability), length.out = 20))
+preds <- predict(fit, newdata = grid, interval = "confidence")
+plot_data <- cbind(grid, preds)
+
+plot.55 = ggplot(df55, aes(distorted_reliability, slope_)) +
+  geom_point(shape = 21, fill = "#00CC33", size = 1) +
+  # The mean prediction line
+  geom_line(data = plot_data, aes(y = fit), color = "red", size = 1) +
+  # The dashed confidence interval lines
+  geom_line(data = plot_data, aes(y = lwr), color = "red", linetype = "dashed") +
+  geom_line(data = plot_data, aes(y = upr), color = "red", linetype = "dashed") +
+  # Reference lines and styling
+  scale_x_continuous(
+    limits = c(0, 100),
+    expand = c(0.005, 0.005)
+  ) +
+  scale_y_continuous(
+    limits = c(-10, 20),
+    expand = c(0.005, 0.005)
+  )+
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey") +
+  geom_vline(xintercept = 50, linetype = "dashed", color = "grey") +
+  theme_classic() +
+  labs(title = chosen_exp,
+       x = "Distorted reliability of 55% reliable sources",
+       y = "Slope of introspective reports")
+  labs(title = chosen_exp, 
+       x = " ", 
+       y = " ")
+
+
+###############  65
+
+fit <- lm(slope_ ~ I(distorted_reliability^2), data = df65)
+
+grid <- data.frame(distorted_reliability = seq(min(df65$distorted_reliability), max(df65$distorted_reliability), length.out = 20))
+preds <- predict(fit, newdata = grid, interval = "confidence")
+plot_data <- cbind(grid, preds)
+
+plot.65 = ggplot(df65, aes(distorted_reliability, slope_)) +
+  geom_point(shape = 21, fill = "#009933", size = 1) +
+  # The mean prediction line
+  geom_line(data = plot_data, aes(y = fit), color = "red", size = 1) +
+  # The dashed confidence interval lines
+  geom_line(data = plot_data, aes(y = lwr), color = "red", linetype = "dashed") +
+  geom_line(data = plot_data, aes(y = upr), color = "red", linetype = "dashed") +
+  # Reference lines and styling
+  scale_x_continuous(
+    limits = c(0, 100),
+    expand = c(0.005, 0.005)
+  ) +
+  scale_y_continuous(
+    limits = c(-10, 20),
+    expand = c(0.005, 0.005)
+  )+
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey") +
+  geom_vline(xintercept = 50, linetype = "dashed", color = "grey") +
+  theme_classic() +
+  labs(title = chosen_exp,
+       x = "Distorted reliability of 55% reliable sources",
+       y = "Slope of introspective reports")
+  labs(title = chosen_exp, 
+       x = " ", 
+       y = " ")
+
+plot.50 + plot.55 + plot.65
+
+
