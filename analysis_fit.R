@@ -2,8 +2,8 @@ library(readr)
 library(ggplot2)
 
 # chosen_exp = 'Alex'
-# chosen_exp = 'Divyaj'
-chosen_exp = 'Exp6'
+chosen_exp = 'Divyaj'
+# chosen_exp = 'Exp6'
 
 #### extract the fit
 
@@ -26,6 +26,8 @@ if (chosen_exp != 'Divyaj'){
   w_mean <- apply(post$w, c(2,3), mean)
 }
 
+# a_mean = alpha_mean
+# b_mean = beta_mean
 
 
 # Group means
@@ -193,6 +195,48 @@ for (i in c(1:length(a_mean))){
   distorted_55 = c(distorted_55, phi(0.55, a_i, b_i))
   distorted_65 = c(distorted_65, phi(0.65, a_i, b_i))
 }
+
+# distorted_50_Exp6 = distorted_50
+# distorted_55_Exp6 = distorted_55
+# distorted_65_Exp6 = distorted_65
+
+# distorted_50_Alex = distorted_50
+# distorted_55_Alex = distorted_55
+# distorted_65_Alex = distorted_65
+
+distorted_50_Divyaj = distorted_50
+distorted_55_Divyaj = distorted_55
+distorted_65_Divyaj = distorted_65
+
+##### stats of distortion
+
+list_50 <- list(Control = distorted_50_Exp6, Mitigation1 = distorted_50_Alex, Mitigation2 = distorted_50_Divyaj)
+list_50_long <- stack(list_50)
+
+
+list_55 <- list(Control = distorted_55_Exp6, Mitigation1 = distorted_55_Alex, Mitigation2 = distorted_55_Divyaj)
+list_55_long <- stack(list_55)
+
+
+list_65 <- list(Control = distorted_65_Exp6, Mitigation1 = distorted_65_Alex, Mitigation2 = distorted_65_Divyaj)
+list_65_long <- stack(list_65)
+
+res_anova <- aov(values ~ ind, data = list_50_long)
+summary(res_anova)
+TukeyHSD(res_anova)
+
+res_anova <- aov(values ~ ind, data = list_55_long)
+summary(res_anova)
+TukeyHSD(res_anova)
+
+res_anova <- aov(values ~ ind, data = list_65_long)
+summary(res_anova)
+TukeyHSD(res_anova)
+
+
+
+
+
 
 
 # get the participants' slopes

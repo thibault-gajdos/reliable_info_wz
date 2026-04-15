@@ -8,17 +8,17 @@ load('./results/performance.rdata')
 
 par(mfrow = c(1, 3), oma = c(0, 0, 3, 0))
 
-plot_performance = function(df_performance, exp_done.by, second_plot){
+plot_performance = function(df_performance, exp_done.by, second_plot, main_text){
   plot_df = df_performance[which(df_performance$Done.by==exp_done.by),]
   plot_df = plot_df[order(plot_df$Accuracy),]
   
   plot(plot_df$Accuracy,
        type = "p",
        pch = 19,
-       xlab = "Index (sorted)",
+       xlab = "Participants",
        ylab = "Performance",
        ylim = c(0.4,1),
-       main = exp_done.by)
+       main = main_text)
   if (second_plot == 'BDT'){
     points(plot_df$BDT_accuracy,
            type = "p",
@@ -36,9 +36,9 @@ plot_performance = function(df_performance, exp_done.by, second_plot){
 }
 
 # plot_performance(performance, 'Exp1', 'BDT')
-plot_performance(performance, 'Exp6', 'BDT')
-plot_performance(performance, 'Alex', 'BDT')
-plot_performance(performance, 'Divyaj', 'BDT')
+plot_performance(performance, 'Exp6', 'BDT', 'Control')
+plot_performance(performance, 'Alex', 'BDT', 'Mitigation 1')
+plot_performance(performance, 'Divyaj', 'BDT', 'Mitigation 2')
 
 
 mtext("Participants vs. BDT", outer = TRUE, cex = 1.5, font = 2)
@@ -48,9 +48,9 @@ mtext("Participants vs. BDT", outer = TRUE, cex = 1.5, font = 2)
 par(mfrow = c(1, 3), oma = c(0, 0, 3, 0))
 
 # plot_performance(performance, 'Exp1', 'Optimal')
-plot_performance(performance, 'Exp6', 'Optimal')
-plot_performance(performance, 'Alex', 'Optimal')
-plot_performance(performance, 'Divyaj', 'Optimal')
+plot_performance(performance, 'Exp6', 'Optimal', 'Control')
+plot_performance(performance, 'Alex', 'Optimal', 'Mitigation 1')
+plot_performance(performance, 'Divyaj', 'Optimal', 'Mitigation 2')
 
 mtext("Correct Choices vs. Optimal Choices", outer = TRUE, cex = 1.5, font = 2)
 
@@ -94,17 +94,74 @@ shapiro.test(performance$Optimal_Choice[performance$Done.by=='Divyaj'])
 ##########################################
 ## Choosing blue vs. net number of blue ##
 ##########################################
-
-rm(list=ls())
-load('./results/data_preprocessed.rdata')
-
-
 library(lme4)
 library(sjPlot)
 library(ggplot2)
 library(dplyr)
+library(readxl)
 
+rm(list=ls())
 
+BDT_choice <- read_excel("data/Exp6/exp6_BDTchoice.xlsx")
+load('./results/data_preprocessed.rdata')
+
+#### simulated BDT
+model.BDT = glm(resp~source1+source2+source3, data = BDT_choice, family = binomial)
+BDT.50 = plot_model(model.BDT, type = "pred", terms = c("source1"), axis.lim = c(0, 1))
+BDT.55 = plot_model(model.BDT, type = "pred", terms = c("source2"), axis.lim = c(0, 1))
+BDT.65 = plot_model(model.BDT, type = "pred", terms = c("source3"), axis.lim = c(0, 1))
+
+pred.s1.prob = BDT.50[["data"]][["predicted"]]
+pred.s1.se = BDT.50[["data"]][["std.error"]]
+pred.s1.conf.low = BDT.50[["data"]][["conf.low"]]
+pred.s1.conf.high = BDT.50[["data"]][["conf.high"]]
+pred.s1.x = BDT.50[["data"]][["x"]]
+
+pred.s2.prob = BDT.55[["data"]][["predicted"]]
+pred.s2.se = BDT.55[["data"]][["std.error"]]
+pred.s2.conf.low = BDT.55[["data"]][["conf.low"]]
+pred.s2.conf.high = BDT.55[["data"]][["conf.high"]]
+pred.s2.x = BDT.55[["data"]][["x"]]
+
+pred.s3.prob = BDT.65[["data"]][["predicted"]]
+pred.s3.se = BDT.65[["data"]][["std.error"]]
+pred.s3.conf.low = BDT.65[["data"]][["conf.low"]]
+pred.s3.conf.high = BDT.65[["data"]][["conf.high"]]
+pred.s3.x = BDT.65[["data"]][["x"]]
+
+df1.BDT <- data.frame(
+  x       = pred.s1.x,
+  prob    = pred.s1.prob,
+  se      = pred.s1.se,
+  conf.low = pred.s1.conf.low,
+  conf.high = pred.s1.conf.high,
+  group   = 'BDT',
+  series  = "50%"
+)
+
+df2.BDT <- data.frame(
+  x       = pred.s2.x,
+  prob    = pred.s2.prob,
+  se      = pred.s2.se,
+  conf.low = pred.s2.conf.low,
+  conf.high = pred.s2.conf.high,
+  group   = 'BDT',
+  series  = "55%"
+)
+
+df3.BDT <- data.frame(
+  x       = pred.s3.x,
+  prob    = pred.s3.prob,
+  se      = pred.s3.se,
+  conf.low = pred.s3.conf.low,
+  conf.high = pred.s3.conf.high,
+  group   = 'BDT',
+  series  = "65%"
+)
+
+df_all.BDT = rbind(df1.BDT, df2.BDT, df3.BDT)
+
+#### experiments
 data_processed$Done.by = as.factor(data_processed$Done.by)
 data_processed$Response = as.numeric(data_processed$Response)
 data_processed$Optimalchoice = as.numeric(data_processed$Optimalchoice)
@@ -112,7 +169,7 @@ data_processed$Optimalchoice = as.numeric(data_processed$Optimalchoice)
 data_to_fit = rbind(data_processed[data_processed$Done.by=='Exp6',],data_processed[data_processed$Done.by!='Exp6',])
 data_to_fit$Done.by = relevel(data_to_fit$Done.by, ref = "Exp6")
 # data_to_fit = data_processed # somehow this has a convergence issue
-model = glmer(Response ~ (1 | Participant.Private.ID) + Done.by * Net.Blue.50 + Done.by * Net.Blue.55 + Done.by * Net.Blue.65, data = data_to_fit, family = binomial)
+# model = glmer(Response ~ (1 | Participant.Private.ID) + Done.by * Net.Blue.50 + Done.by * Net.Blue.55 + Done.by * Net.Blue.65, data = data_to_fit, family = binomial)
 
 model <- glmer(
   Response ~ (1 | Participant.Private.ID) +
@@ -198,19 +255,74 @@ df_all <- rbind(df1, df2, df3)
 my_colors = c('#0099FF', '#00CC33', '#009933')
 
 ggplot(df_all, aes(x = x, y = prob, color = series, fill = series)) +
-  geom_line(size = 1) +
+  
   geom_ribbon(aes(ymin = conf.low,
                   ymax = conf.high),
-              alpha = 0.20, color = NA) +
+              alpha = 0.3, color = NA) +
+  geom_line(size = 0.5) +
   facet_wrap(~ group) +
-  # scale_color_manual(values = my_colors) +
-  # scale_fill_manual(values = my_colors) +
+  scale_color_manual(values = my_colors) +
+  scale_fill_manual(values = my_colors) +
   scale_y_continuous(limits = c(0, 1)) +
   labs(x = "Net Number of Blue",
-       y = "Predicted Probability",
+       y = "Predicted Probability of Choosing Blue",
        color = "Reliability",
        fill = "Reliability") +
   theme_bw()
+
+
+library(tidyverse)
+
+# 核心修正：确保数据按 X 轴有序连接
+df_all.BDT = rbind(df_all.BDT,df_all)
+
+df_all_sorted <- df_all.BDT %>%
+  arrange(series, group, x) # 确保每个 group 内部的 x 是单调递增的
+
+df_all_sorted$group <- factor(df_all_sorted$group, 
+                              levels = c("Exp6", "Alex", "Divyaj", "BDT"))
+
+ggplot(df_all_sorted, aes(x = x, y = prob, color = series, fill = series, 
+                          group = interaction(series, group))) + # 复合分组  
+  # a. 先画 Ribbon
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high),
+              alpha = 0.2, 
+              color = NA) +
+  
+  # b. 后画 Line，增加终极修正：`group = group`
+  geom_line(aes(linetype = group, # 映射线型
+                group = group),   # 终极修正：显式指定绘图分组
+            size = 0.6,
+            alpha = 0.8,
+            # 增加位置微调，在视觉上进一步杜绝重叠和勾连
+            position = position_dodge(width = 0.1)) + 
+  
+  # c. 分面与标度
+  facet_wrap(~ series) +
+  scale_color_manual(values = my_colors) +
+  scale_fill_manual(values = my_colors) +
+  scale_linetype_manual(values = c("Exp6" = "solid", 
+                                   "Alex" = "longdash", 
+                                   "Divyaj" = "dotted",
+                                   "BDT" = "dotdash"),
+                        labels = c("Exp6" = "Control",
+                                   "Alex" = "Mitigation 1",
+                                   "Divyaj" = "Mitigation 2",
+                                   "BDT" = "BDT")) +
+  
+  # d. 其他设置
+  scale_y_continuous(limits = c(0, 1), expand = c(0.005, 0.005)) +
+  labs(x = "Net Number of Blue",
+       y = "Predicted Probability of Choosing Blue",
+       color = "Reliability",
+       fill = "Reliability",
+       linetype = "Experiment Group") +
+  theme_bw() +
+  theme(panel.spacing = unit(1, "lines"),
+        legend.position = "right")
+
+
+
 
 
 library(patchwork)
@@ -251,6 +363,7 @@ chosen_exp = 'Divyaj'
 
 
 data = data_processed[which(data_processed$Done.by==chosen_exp),]
+data = data_processed
 
 data$Net.Cong.50 = data$Net.Blue.50
 data$Net.Cong.55 = data$Net.Blue.55
@@ -269,6 +382,8 @@ data$Participant.Private.ID = as.factor(data$Participant.Private.ID)
 library(lme4)
 
 
+
+lm.slider = lmer(slider_response ~  (1 | Participant.Private.ID) + slider_reliability * Net.Cong.50 + slider_reliability * Net.Cong.55 + slider_reliability * Net.Cong.65, data = data)
 
 lm.slider = lmer(slider_response ~  (1 | Participant.Private.ID) + slider_reliability * Net.Cong.50 + slider_reliability * Net.Cong.55 + slider_reliability * Net.Cong.65, data = data)
 
