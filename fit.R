@@ -1,4 +1,9 @@
+library('jsonlite')
+library('dplyr')
+
 ### Prepare the data for stan
+rm(list=ls())
+load('./results/data_preprocessed.rdata')
 
 
 results = lapply(data_processed$Stimulus.Info, function(txt) {
@@ -78,6 +83,7 @@ for (n in 1:N) {
 }
 
 
+l_proba <- log(proba/(1-proba))
 
 
 data_list <- list(
@@ -86,7 +92,8 @@ data_list <- list(
   I = I,
   Tsubj = t_subjs,
   color = color,
-  proba = proba,
+  # proba = proba,
+  l_proba = l_proba,
   choice = choice)
 
 
@@ -110,71 +117,87 @@ library(readr)
 #             control = list(adapt_delta = .8,  max_treedepth = 12)
 # )
 
-model.basic <- stan_model(file = './stan/log_basic.stan')
+# model.basic <- stan_model(file = './stan/log_basic.stan')
 
 
 
-fit <- sampling(
-  model.basic,
-  data = data_list,
-  iter = 2000,
-  chains = 1,
-  algorithm = "Fixed_param"
-)
+# fit <- sampling(
+#   model.basic,
+#   data = data_list,
+#   iter = 2000,
+#   chains = 1,
+#   algorithm = "Fixed_param"
+# )
 
 
 
-write_rds(fit, paste('./results/',chosen_exp,'/log_basic.rds',sep = ''))
-loo <- loo(fit)
-save(loo, file = paste('./results/',chosen_exp,'/loo/loo_log_basic.rdata',sep = ''))
+# write_rds(fit, paste('./results/',chosen_exp,'/log_basic.rds',sep = ''))
+# loo <- loo(fit)
+# save(loo, file = paste('./results/',chosen_exp,'/loo/loo_log_basic.rdata',sep = ''))
 
 
-log_lik <- extract(fit)$log_lik
-loo_result <- loo(log_lik, r_eff = NA)
-loo_result$estimates
+# log_lik <- extract(fit)$log_lik
+# loo_result <- loo(log_lik, r_eff = NA)
+# loo_result$estimates
 
 
 ## log seq model
-fit <- stan('./stan/log_seq_basic.stan',
-            data = data_list,
-            iter = 4000,
-            warmup = 2000,
-            chains = 4,
-            cores = 4,
-            init =  "random",
-            seed = 12345,
-            control = list(adapt_delta = .95,  max_treedepth = 12)
-)
+# fit <- stan('./stan/log_seq_basic.stan',
+#             data = data_list,
+#             iter = 4000,
+#             warmup = 2000,
+#             chains = 4,
+#             cores = 4,
+#             init =  "random",
+#             seed = 12345,
+#             control = list(adapt_delta = .95,  max_treedepth = 12)
+# )
 
-write_rds(fit, paste('./results/',chosen_exp,'/log_seq.rds',sep = ''))
-
-loo <- loo(fit) # leave one method
-save(loo, file = paste('./results/',chosen_exp,'/loo/loo_log_seq.rdata',sep = ''))
+# write_rds(fit, paste('./results/',chosen_exp,'/log_seq.rds',sep = ''))
+# loo <- loo(fit) # leave one method
+# save(loo, file = paste('./results/',chosen_exp,'/loo/loo_log_seq.rdata',sep = ''))
 
 
 
 ## basic model 
 
-model.basic <- stan_model(file = './stan/basic.stan')
+# model.basic <- stan_model(file = './stan/basic.stan')
+# fit <- sampling(
+#   model.basic,
+#   data = data_list,
+#   iter = 2000,
+#   chains = 1,
+#   algorithm = "Fixed_param"
+# )
 
-fit <- sampling(
-  model.basic,
-  data = data_list,
-  iter = 2000,
-  chains = 1,
-  algorithm = "Fixed_param"
-)
-
-write_rds(fit, paste('./results/',chosen_exp,'/basic.rds',sep = ''))
-loo <- loo(fit)
-save(loo, file = paste('./results/',chosen_exp,'/loo/loo_basic.rdata',sep = ''))
+# write_rds(fit, paste('./results/',chosen_exp,'/basic.rds',sep = ''))
+# loo <- loo(fit)
+# save(loo, file = paste('./results/',chosen_exp,'/loo/loo_basic.rdata',sep = ''))
 
 
 ## basic seq model
-fit <- stan('./stan/basic_seq.stan',
+# fit <- stan('./stan/basic_seq.stan',
+#             data = data_list,
+#             iter = 4000,
+#             warmup = 2000,
+#             chains = 4,
+#             cores = 4,
+#             init =  "random",
+#             seed = 12345,
+#             control = list(adapt_delta = .95,  max_treedepth = 12)
+# )
+
+# write_rds(fit, paste('./results/',chosen_exp,'/basic_seq.rds',sep = ''))
+# loo <- loo(fit) # leave one method
+# save(loo, file = paste('./results/',chosen_exp,'/loo/loo_basic_seq.rdata',sep = ''))
+
+
+
+# log seq theta model
+fit <- stan('./stan/log_seq_theta.stan',
             data = data_list,
-            iter = 4000,
-            warmup = 2000,
+            iter = 500,
+            warmup = 250,
             chains = 4,
             cores = 4,
             init =  "random",
@@ -182,10 +205,7 @@ fit <- stan('./stan/basic_seq.stan',
             control = list(adapt_delta = .95,  max_treedepth = 12)
 )
 
-write_rds(fit, paste('./results/',chosen_exp,'/basic_seq.rds',sep = ''))
-
+write_rds(fit, paste('./results/',chosen_exp,'/log_seq_theta.rds',sep = ''))
 loo <- loo(fit) # leave one method
-save(loo, file = paste('./results/',chosen_exp,'/loo/loo_basic_seq.rdata',sep = ''))
-
-
+save(loo, file = paste('./results/',chosen_exp,'/loo/loo_log_seq_theta.rdata',sep = ''))
 
