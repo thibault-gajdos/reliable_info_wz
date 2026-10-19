@@ -5,6 +5,9 @@ library('dplyr')
 rm(list=ls())
 load('./results/data_preprocessed.rdata')
 
+data_temp = data_processed[which(data_processed$Done.by == 'Divyaj'),]
+length(unique(data_temp$Participant.Private.ID))
+
 
 results = lapply(data_processed$Stimulus.Info, function(txt) {
   d = fromJSON(txt)
@@ -34,8 +37,8 @@ data_processed = cbind(data_processed, results)
 data_processed = data_processed[,c(1:37)]
 
 # chosen_exp = 'Alex'
-# chosen_exp = 'Divyaj'
-chosen_exp = 'Exp6'
+chosen_exp = 'Divyaj'
+# chosen_exp = 'Exp6'
 
 
 data = data_processed[which(data_processed$Done.by==chosen_exp),]
@@ -86,14 +89,16 @@ for (n in 1:N) {
 l_proba <- log(proba/(1-proba))
 
 
+
+
 data_list <- list(
   N = N,
   T_max = T_max,
   I = I,
   Tsubj = t_subjs,
   color = color,
-  # proba = proba,
-  l_proba = l_proba,
+  proba = proba,
+  # l_proba = l_proba,
   choice = choice)
 
 
@@ -142,6 +147,7 @@ library(readr)
 
 
 ## log seq model
+# print(Sys.time())
 # fit <- stan('./stan/log_seq_basic.stan',
 #             data = data_list,
 #             iter = 4000,
@@ -152,9 +158,11 @@ library(readr)
 #             seed = 12345,
 #             control = list(adapt_delta = .95,  max_treedepth = 12)
 # )
-
+# print(Sys.time())
 # write_rds(fit, paste('./results/',chosen_exp,'/log_seq.rds',sep = ''))
-# loo <- loo(fit) # leave one method
+# print(Sys.time())
+# loo <- loo(fit, moment_match = TRUE) # leave one method
+# print(Sys.time())
 # save(loo, file = paste('./results/',chosen_exp,'/loo/loo_log_seq.rdata',sep = ''))
 
 
@@ -171,7 +179,7 @@ library(readr)
 # )
 
 # write_rds(fit, paste('./results/',chosen_exp,'/basic.rds',sep = ''))
-# loo <- loo(fit)
+# loo <- loo(fit, moment_matching = TRUE)
 # save(loo, file = paste('./results/',chosen_exp,'/loo/loo_basic.rdata',sep = ''))
 
 
@@ -188,24 +196,48 @@ library(readr)
 # )
 
 # write_rds(fit, paste('./results/',chosen_exp,'/basic_seq.rds',sep = ''))
-# loo <- loo(fit) # leave one method
+# loo <- loo(fit, moment_matching = TRUE) # leave one method
 # save(loo, file = paste('./results/',chosen_exp,'/loo/loo_basic_seq.rdata',sep = ''))
 
 
 
 # log seq theta model
-fit <- stan('./stan/log_seq_theta.stan',
+# print(Sys.time())
+# fit <- stan('./stan/log_seq_theta.stan',
+#             data = data_list,
+#             iter = 4000,
+#             warmup = 2000,
+#             chains = 4,
+#             cores = 4,
+#             init =  "random",
+#             seed = 12345,
+#             control = list(adapt_delta = .95,  max_treedepth = 12)
+# )
+# 
+# print(Sys.time())
+# write_rds(fit, paste('./results/',chosen_exp,'/log_seq_theta.rds',sep = ''))
+# print(Sys.time())
+# loo <- loo(fit, moment_match = TRUE) # leave one method
+# print(Sys.time())
+# save(loo, file = paste('./results/',chosen_exp,'/loo/loo_log_seq_theta.rdata',sep = ''))
+
+
+
+# 3 values theta model
+print(Sys.time())
+fit <- stan('./stan/3values_seq_theta.stan',
             data = data_list,
-            iter = 500,
-            warmup = 250,
+            iter = 4000,
+            warmup = 2000,
             chains = 4,
             cores = 4,
             init =  "random",
             seed = 12345,
             control = list(adapt_delta = .95,  max_treedepth = 12)
 )
-
-write_rds(fit, paste('./results/',chosen_exp,'/log_seq_theta.rds',sep = ''))
-loo <- loo(fit) # leave one method
-save(loo, file = paste('./results/',chosen_exp,'/loo/loo_log_seq_theta.rdata',sep = ''))
+print(Sys.time())
+write_rds(fit, paste('./results/',chosen_exp,'/3values_seq_theta.rds',sep = ''))
+loo <- loo(fit, moment_match = TRUE) # leave one method
+print(Sys.time())
+save(loo, file = paste('./results/',chosen_exp,'/loo/loo_3values_seq_theta.rdata',sep = ''))
 

@@ -28,15 +28,15 @@ parameters {
 }
 
 transformed parameters {
-  vector<lower = 0>[N] alpha;
+  vector<lower = 0, upper = 3>[N] alpha;
   vector[N] beta;
-  vector<lower = 0>[N] theta;
+  vector<lower = 1, upper = 10>[N] theta;
   matrix<lower=0, upper=2>[N, I-1] w;
   
   for (n in 1:N){
-    alpha[n] = Phi_approx(mu_pr[1]+ sigma[1]*alpha_raw[n])*20; 
+    alpha[n] = Phi_approx(mu_pr[1]+ sigma[1]*alpha_raw[n])*3; 
     beta[n] = mu_pr[2]+sigma[2]*beta_raw[n];
-    theta[n] = Phi_approx(mu_pr[3] + sigma[3]*theta_raw[n]) * 5;
+    theta[n] = 1 + Phi_approx(mu_pr[3] + sigma[3]*theta_raw[n]) * 9;
     for (i in 1:5){
     	w[n,i] = Phi_approx(mu_w[i]+ sigma_w[i]*w_raw[n,i])*2;
     }
@@ -111,9 +111,9 @@ generated quantities {
 	}
   }
   
-  mu_alpha   = Phi_approx(mu_pr[1])*20;
+  mu_alpha   = Phi_approx(mu_pr[1])*3;
   mu_beta    = mu_pr[2];
-  mu_theta   = Phi_approx(mu_pr[3])*5;
+  mu_theta   = Phi_approx(mu_pr[3])*9 + 1;
   mu_w1      = Phi_approx(mu_w[1])*2;
   mu_w2      = Phi_approx(mu_w[2])*2;
   mu_w3      = Phi_approx(mu_w[3])*2;

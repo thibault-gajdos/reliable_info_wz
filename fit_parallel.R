@@ -32,14 +32,14 @@ data_processed = cbind(data_processed, results)
 
 data_processed = data_processed[,c(1:37)]
 
-# chosen_exp = 'Alex'
+chosen_exp = 'Alex'
 # chosen_exp = 'Divyaj'
-chosen_exp = 'Exp6'
+# chosen_exp = 'Exp6'
 
 
-additional_suffix = '_original_edit'
+# additional_suffix = '_original_edit'
 # additional_suffix = '_redo'
-# additional_suffix = ''
+additional_suffix = ''
 
 
 
@@ -92,16 +92,26 @@ for (n in 1:N) {
 p = max(proba)
 l_obs = log(p/(1-p))
 
+# data_list <- list(
+#   N = N,
+#   T_max = T_max,
+#   I_max = I,
+#   Tsubj = t_subjs,
+#   color = color,
+#   proba = proba,
+#   choice = choice,
+#   sample = sample,
+#   l_obs = l_obs)
+
 data_list <- list(
   N = N,
   T_max = T_max,
   I_max = I,
   Tsubj = t_subjs,
+  sample = sample,
   color = color,
   proba = proba,
-  choice = choice,
-  sample = sample,
-  l_obs = l_obs)
+  choice = choice)
 
 
 #####################################################
@@ -116,9 +126,12 @@ data_list$grainsize = 5 ## specify grainsize for within chain parallelization
 
 ## Compile the model
 model <- cmdstan_model(
-  stan_file = './stan/log_trunc_simplified_original_edit.stan',
+  # stan_file = './stan/log_trunc_simplified_original_edit.stan',
+  # stan_file = './stan/BLO_choice.stan',
+  stan_file = './stan/BLO_noise_choice.stan',
   force_recompile = TRUE, ## necessary if you change the mode
-  cpp_options = list(stan_opencl = TRUE, stan_threads = TRUE), ## within chain parallel
+  # cpp_options = list(stan_opencl = TRUE, stan_threads = TRUE), ## within chain parallel
+  cpp_options = list(stan_threads = TRUE), ## within chain parallel
   stanc_options = list("O1"), ## fastest sampling
   compile_model_methods = TRUE ## necessary for loo moment matching
 )
@@ -141,10 +154,12 @@ fit <- model$sample(
 
 # write_rds(fit, paste('./results/',chosen_exp,'/log_full.rds',sep = ''))
 
-fit$save_object(file = paste('./results/',chosen_exp,'/log_full',additional_suffix,'.rds',sep = ''))
+# fit$save_object(file = paste('./results/',chosen_exp,'/log_full',additional_suffix,'.rds',sep = ''))
+fit$save_object(file = paste('./results/',chosen_exp,'/BLO_noise_choice',additional_suffix,'.rds',sep = ''))
 
 loo <- fit$loo(cores = 10, moment_match = TRUE)
-save(loo, file = paste('./results/',chosen_exp,'/loo/loo_log_full',additional_suffix,'.rds',sep = ''))
+# save(loo, file = paste('./results/',chosen_exp,'/loo/loo_log_full',additional_suffix,'.rds',sep = ''))
+save(loo, file = paste('./results/',chosen_exp,'/loo/loo_BLO_noise_choice',additional_suffix,'.rds',sep = ''))
 
 loo$estimates
 
