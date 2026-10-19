@@ -9,22 +9,29 @@ chosen_exp = 'Divyaj'
 
 ########
 
-# Extract posterior samples
-if(chosen_exp =='Divyaj'){
-  fit = read_rds(paste('./results/',chosen_exp,'/log_basic.rds', sep = ''), refhook = NULL)
-  post <- rstan::extract(fit)
-}else{
-  fit = read_rds(paste('./results/',chosen_exp,'/log_seq.rds', sep = ''), refhook = NULL)
-  post <- rstan::extract(fit)
-}
+# Extract posterior samples (basic + seq)
+# if(chosen_exp =='Divyaj'){
+#   fit = read_rds(paste('./results/',chosen_exp,'/log_basic.rds', sep = ''), refhook = NULL)
+#   post <- rstan::extract(fit)
+# }else{
+#   fit = read_rds(paste('./results/',chosen_exp,'/log_seq.rds', sep = ''), refhook = NULL)
+#   post <- rstan::extract(fit)
+# }
+
+# Extract posterior samples (basic + seq + theta)
+fit = read_rds(paste('./results/',chosen_exp,'/log_seq_theta.rds', sep = ''), refhook = NULL)
+post <- rstan::extract(fit)
 
 # Participant-level posterior means
 
 a_mean <- apply(post$alpha, 2, mean)
 b_mean <- apply(post$beta, 2, mean)
-if (chosen_exp != 'Divyaj'){
-  w_mean <- apply(post$w, c(2,3), mean)
-}
+# if (chosen_exp != 'Divyaj'){
+#   w_mean <- apply(post$w, c(2,3), mean)
+# }
+w_mean <- apply(post$w, c(2,3), mean)
+
+
 
 # a_mean = alpha_mean
 # b_mean = beta_mean
@@ -204,34 +211,34 @@ for (i in c(1:length(a_mean))){
 # distorted_55_Alex = distorted_55
 # distorted_65_Alex = distorted_65
 
-distorted_50_Divyaj = distorted_50
-distorted_55_Divyaj = distorted_55
-distorted_65_Divyaj = distorted_65
+# distorted_50_Divyaj = distorted_50
+# distorted_55_Divyaj = distorted_55
+# distorted_65_Divyaj = distorted_65
 
-##### stats of distortion
-
-list_50 <- list(Control = distorted_50_Exp6, Mitigation1 = distorted_50_Alex, Mitigation2 = distorted_50_Divyaj)
-list_50_long <- stack(list_50)
-
-
-list_55 <- list(Control = distorted_55_Exp6, Mitigation1 = distorted_55_Alex, Mitigation2 = distorted_55_Divyaj)
-list_55_long <- stack(list_55)
-
-
-list_65 <- list(Control = distorted_65_Exp6, Mitigation1 = distorted_65_Alex, Mitigation2 = distorted_65_Divyaj)
-list_65_long <- stack(list_65)
-
-res_anova <- aov(values ~ ind, data = list_50_long)
-summary(res_anova)
-TukeyHSD(res_anova)
-
-res_anova <- aov(values ~ ind, data = list_55_long)
-summary(res_anova)
-TukeyHSD(res_anova)
-
-res_anova <- aov(values ~ ind, data = list_65_long)
-summary(res_anova)
-TukeyHSD(res_anova)
+# ##### stats of distortion
+# 
+# list_50 <- list(Control = distorted_50_Exp6, Mitigation1 = distorted_50_Alex, Mitigation2 = distorted_50_Divyaj)
+# list_50_long <- stack(list_50)
+# 
+# 
+# list_55 <- list(Control = distorted_55_Exp6, Mitigation1 = distorted_55_Alex, Mitigation2 = distorted_55_Divyaj)
+# list_55_long <- stack(list_55)
+# 
+# 
+# list_65 <- list(Control = distorted_65_Exp6, Mitigation1 = distorted_65_Alex, Mitigation2 = distorted_65_Divyaj)
+# list_65_long <- stack(list_65)
+# 
+# res_anova <- aov(values ~ ind, data = list_50_long)
+# summary(res_anova)
+# TukeyHSD(res_anova)
+# 
+# res_anova <- aov(values ~ ind, data = list_55_long)
+# summary(res_anova)
+# TukeyHSD(res_anova)
+# 
+# res_anova <- aov(values ~ ind, data = list_65_long)
+# summary(res_anova)
+# TukeyHSD(res_anova)
 
 
 
@@ -309,7 +316,7 @@ library(patchwork)
 #################  50
 
 fit <- lm(slope_ ~ I(distorted_reliability^2), data = df50)
-
+summary(fit)
 grid <- data.frame(distorted_reliability = seq(min(df50$distorted_reliability), max(df50$distorted_reliability), length.out = 20))
 preds <- predict(fit, newdata = grid, interval = "confidence")
 plot_data <- cbind(grid, preds)
@@ -344,6 +351,7 @@ plot.50 = ggplot(df50, aes(distorted_reliability, slope_)) +
 ###############  55
 
 fit <- lm(slope_ ~ I(distorted_reliability^2), data = df55)
+summary(fit)
 
 grid <- data.frame(distorted_reliability = seq(min(df55$distorted_reliability), max(df55$distorted_reliability), length.out = 20))
 preds <- predict(fit, newdata = grid, interval = "confidence")
@@ -379,7 +387,7 @@ plot.55 = ggplot(df55, aes(distorted_reliability, slope_)) +
 ###############  65
 
 fit <- lm(slope_ ~ I(distorted_reliability^2), data = df65)
-
+summary(fit)
 grid <- data.frame(distorted_reliability = seq(min(df65$distorted_reliability), max(df65$distorted_reliability), length.out = 20))
 preds <- predict(fit, newdata = grid, interval = "confidence")
 plot_data <- cbind(grid, preds)
@@ -412,4 +420,7 @@ plot.65 = ggplot(df65, aes(distorted_reliability, slope_)) +
 
 plot.50 + plot.55 + plot.65
 
+#### theta distribution
+
+hist(post$theta, breaks =40)
 

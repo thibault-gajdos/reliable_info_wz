@@ -6,7 +6,8 @@ load('./results/performance.rdata')
 
 #### Visualize 
 
-par(mfrow = c(1, 3), oma = c(0, 0, 3, 0))
+# par(mfrow = c(1, 3), oma = c(0, 0, 3, 0))
+par(mfrow = c(1, 4), oma = c(0, 0, 3, 0))
 
 plot_performance = function(df_performance, exp_done.by, second_plot, main_text){
   plot_df = df_performance[which(df_performance$Done.by==exp_done.by),]
@@ -39,18 +40,20 @@ plot_performance = function(df_performance, exp_done.by, second_plot, main_text)
 plot_performance(performance, 'Exp6', 'BDT', 'Control')
 plot_performance(performance, 'Alex', 'BDT', 'Mitigation 1')
 plot_performance(performance, 'Divyaj', 'BDT', 'Mitigation 2')
+plot_performance(performance, 'mitigation3', 'BDT', 'Mitigation 3')
 
 
 mtext("Participants vs. BDT", outer = TRUE, cex = 1.5, font = 2)
 
 ### Optimal Choices vs. Correct Choices
 
-par(mfrow = c(1, 3), oma = c(0, 0, 3, 0))
+par(mfrow = c(1, 4), oma = c(0, 0, 3, 0))
 
 # plot_performance(performance, 'Exp1', 'Optimal')
 plot_performance(performance, 'Exp6', 'Optimal', 'Control')
 plot_performance(performance, 'Alex', 'Optimal', 'Mitigation 1')
 plot_performance(performance, 'Divyaj', 'Optimal', 'Mitigation 2')
+plot_performance(performance, 'mitigation3', 'Optimal', 'Mitigation 3')
 
 mtext("Correct Choices vs. Optimal Choices", outer = TRUE, cex = 1.5, font = 2)
 
@@ -61,10 +64,12 @@ mtext("Correct Choices vs. Optimal Choices", outer = TRUE, cex = 1.5, font = 2)
 shapiro.test(performance$Accuracy[performance$Done.by=='Exp6'])
 shapiro.test(performance$Accuracy[performance$Done.by=='Alex'])
 shapiro.test(performance$Accuracy[performance$Done.by=='Divyaj'])
+shapiro.test(performance$Accuracy[performance$Done.by=='mitigation3'])
 
 shapiro.test(performance$BDT_accuracy[performance$Done.by=='Exp6'])
 shapiro.test(performance$BDT_accuracy[performance$Done.by=='Alex'])
 shapiro.test(performance$BDT_accuracy[performance$Done.by=='Divyaj'])
+shapiro.test(performance$BDT_accuracy[performance$Done.by=='mitigation3'])
 
 ## accuracy and BDT accuracy are normally distributed
 performance$Done.by = as.factor(performance$Done.by)
@@ -86,6 +91,7 @@ dunnTest(Optimal_Choice ~ Done.by, data = performance, method = "bonferroni")
 shapiro.test(performance$Optimal_Choice[performance$Done.by=='Exp6'])
 shapiro.test(performance$Optimal_Choice[performance$Done.by=='Alex'])
 shapiro.test(performance$Optimal_Choice[performance$Done.by=='Divyaj'])
+shapiro.test(performance$Optimal_Choice[performance$Done.by=='mitigation3'])
 
 
 
@@ -170,6 +176,7 @@ data_to_fit = rbind(data_processed[data_processed$Done.by=='Exp6',],data_process
 data_to_fit$Done.by = relevel(data_to_fit$Done.by, ref = "Exp6")
 # data_to_fit = data_processed # somehow this has a convergence issue
 # model = glmer(Response ~ (1 | Participant.Private.ID) + Done.by * Net.Blue.50 + Done.by * Net.Blue.55 + Done.by * Net.Blue.65, data = data_to_fit, family = binomial)
+
 
 model <- glmer(
   Response ~ (1 | Participant.Private.ID) +
@@ -273,18 +280,16 @@ ggplot(df_all, aes(x = x, y = prob, color = series, fill = series)) +
 
 library(tidyverse)
 
-# 核心修正：确保数据按 X 轴有序连接
 df_all.BDT = rbind(df_all.BDT,df_all)
 
 df_all_sorted <- df_all.BDT %>%
-  arrange(series, group, x) # 确保每个 group 内部的 x 是单调递增的
+  arrange(series, group, x)
 
 df_all_sorted$group <- factor(df_all_sorted$group, 
-                              levels = c("Exp6", "Alex", "Divyaj", "BDT"))
+                              levels = c("Exp6", "Alex", "Divyaj", "mitigation3", "BDT"))
 
 ggplot(df_all_sorted, aes(x = x, y = prob, color = series, fill = series, 
-                          group = interaction(series, group))) + # 复合分组  
-  # a. 先画 Ribbon
+                          group = interaction(series, group))) + 
   geom_ribbon(aes(ymin = conf.low, ymax = conf.high),
               alpha = 0.2, 
               color = NA) +
@@ -304,10 +309,12 @@ ggplot(df_all_sorted, aes(x = x, y = prob, color = series, fill = series,
   scale_linetype_manual(values = c("Exp6" = "solid", 
                                    "Alex" = "longdash", 
                                    "Divyaj" = "dotted",
+                                   "mitigation3" = "twodash",
                                    "BDT" = "dotdash"),
                         labels = c("Exp6" = "Control",
                                    "Alex" = "Mitigation 1",
                                    "Divyaj" = "Mitigation 2",
+                                   "mitigation3" = "Mitigation 3",
                                    "BDT" = "BDT")) +
   
   # d. 其他设置
@@ -329,22 +336,22 @@ library(patchwork)
 
 
 (p.50 +
-    scale_color_manual(values = c("#F8766D", "#F8766D", "#F8766D"))+
-    scale_fill_manual(values = c("#F8766D", "#F8766D", "#F8766D")) +
+    scale_color_manual(values = c("#F8766D", "#F8766D", "#F8766D","#F8766D"))+
+    scale_fill_manual(values = c("#F8766D", "#F8766D", "#F8766D","#F8766D")) +
     aes(linetype = group) +
-    scale_linetype_manual(values = c("solid", "longdash", "dotted")))|
+    scale_linetype_manual(values = c("solid", "longdash", "dotted","twodash")))|
   
   (p.55 +
-     scale_color_manual(values = c("#00BA38", "#00BA38", "#00BA38"))+
-     scale_fill_manual(values = c("#00BA38", "#00BA38", "#00BA38")) +
+     scale_color_manual(values = c("#00BA38", "#00BA38", "#00BA38", "#00BA38"))+
+     scale_fill_manual(values = c("#00BA38", "#00BA38", "#00BA38", "#00BA38")) +
      aes(linetype = group) +
-     scale_linetype_manual(values = c("solid", "longdash", "dotted")))|
+     scale_linetype_manual(values = c("solid", "longdash", "dotted","twodash")))|
   
   (p.65 +
-     scale_color_manual(values = c("#619CFF", "#619CFF", "#619CFF"))+
-     scale_fill_manual(values = c("#619CFF", "#619CFF", "#619CFF")) +
+     scale_color_manual(values = c("#619CFF", "#619CFF", "#619CFF", "#619CFF"))+
+     scale_fill_manual(values = c("#619CFF", "#619CFF", "#619CFF", "#619CFF")) +
      aes(linetype = group) +
-     scale_linetype_manual(values = c("solid", "longdash", "dotted")))
+     scale_linetype_manual(values = c("solid", "longdash", "dotted","twodash")))
 
 
 
@@ -357,13 +364,14 @@ load('./results/data_preprocessed.rdata')
 rm(list=setdiff(ls(), "data_processed"))
 
 # chosen_exp = 'Alex'
-chosen_exp = 'Divyaj'
+# chosen_exp = 'Divyaj'
 # chosen_exp = 'Exp6'
+chosen_exp = 'mitigation3'
 
 
 
 data = data_processed[which(data_processed$Done.by==chosen_exp),]
-data = data_processed
+# data = data_processed
 
 data$Net.Cong.50 = data$Net.Blue.50
 data$Net.Cong.55 = data$Net.Blue.55
@@ -479,4 +487,190 @@ ggplot(df_all, aes(x = x, y = prob, color = series, fill = series)) +
        color = "Reliability",
        fill = "Reliability") +
   theme_bw()
+
+
+#################################
+## learning and sliding window ##
+#################################
+
+
+time_seq_df = data_processed
+time_seq_df <- time_seq_df %>%
+  group_by(Participant.Private.ID) %>%
+  mutate(Trial = row_number()) %>%
+  ungroup() # Good practice to ungroup after calculations
+
+time_seq_df <- time_seq_df %>% 
+  mutate(OptimalAccuracy = as.numeric(Response == Optimalchoice))
+
+ggplot(data = time_seq_df, aes(Trial, OptimalAccuracy))+
+  geom_smooth(aes(color = Done.by), 
+              method = "glm", 
+              method.args = list(family = "binomial"),
+              se = TRUE, 
+              linewidth = 1.5) +
+  theme_minimal()
+
+
+
+
+window_length <- 50
+
+accuracy_window_df <- time_seq_df %>%
+  filter(Trial >= 1) %>%
+  group_by(
+    Done.by,
+    Participant.Private.ID
+  ) %>%
+  group_modify(function(df, key) {
+    
+    max_trial <- max(df$Trial, na.rm = TRUE)
+    
+    window_start <- 1:(max_trial - window_length + 1)
+    
+    data.frame(
+      Window_start = window_start,
+      Window_end = window_start + window_length - 1,
+      Accuracy = sapply(
+        window_start,
+        function(start) {
+          mean(
+            df$OptimalAccuracy[
+              df$Trial >= start &
+                df$Trial <= start + window_length - 1
+            ],
+            na.rm = TRUE
+          )
+        }
+      ),
+      N_trials = sapply(
+        window_start,
+        function(start) {
+          sum(
+            df$Trial >= start &
+              df$Trial <= start + window_length - 1
+          )
+        }
+      )
+    )
+  }) %>%
+  ungroup()
+
+
+# id_row = which(time_seq_df$Participant.Private.ID==id)
+# 
+# 
+# for(id in unique(time_seq_df$Participant.Private.ID)){
+#   id_row = which(time_seq_df$Participant.Private.ID==id)
+#   print(max(time_seq_df[id_row,]$Trial))
+# }
+
+
+
+ggplot(
+  accuracy_window_df,
+  aes(
+    x = Window_end,
+    y = Accuracy,
+    group = Participant.Private.ID,
+    colour = Done.by
+  )
+) +
+  geom_line(alpha = 0.1) +
+  geom_smooth(
+    aes(
+      group = Done.by,
+      colour = Done.by
+    ),
+    method = "loess",
+    se = TRUE,
+    linewidth = 1.2
+  ) +
+  theme_classic() +
+  labs(
+    x = "Trial",
+    y = "Accuracy",
+    colour = "Experiment"
+  )
+
+
+
+accuracy_window_exp_df <- time_seq_df %>%
+  filter(Trial >= 1) %>%
+  group_by(Done.by) %>%
+  group_modify(function(df, key) {
+    
+    max_trial <- max(df$Trial, na.rm = TRUE)
+    
+    window_start <- 1:(max_trial - window_length + 1)
+    
+    data.frame(
+      Window_start = window_start,
+      Window_end = window_start + window_length - 1,
+      Accuracy = sapply(
+        window_start,
+        function(start) {
+          mean(
+            df$OptimalAccuracy[
+              df$Trial >= start &
+                df$Trial <= start + window_length - 1
+            ],
+            na.rm = TRUE
+          )
+        }
+      ),
+      N_trials = sapply(
+        window_start,
+        function(start) {
+          sum(
+            df$Trial >= start &
+              df$Trial <= start + window_length - 1
+          )
+        }
+      ),
+      N_participants = n_distinct(df$Participant.Private.ID)
+    )
+  }) %>%
+  ungroup()
+
+accuracy_window_exp_df$Done.by = factor(accuracy_window_exp_df$Done.by, levels = c("Exp6", "Alex", "Divyaj", "mitigation3"))
+
+
+ggplot(accuracy_window_exp_df, aes(Window_end, Accuracy))+
+  geom_line(aes(colour = Done.by))+
+  theme_classic() +
+  labs(
+    x = "Trial",
+    y = "Accuracy",
+    colour = "Experiment",
+    title = ''
+  ) + scale_colour_discrete(labels = c("Exp6" = "Control",
+                                      "Alex" = "Mitigation 1",
+                                      "Divyaj" = "Mitigation 2",
+                                      "mitigation3" = "Mitigation 3"))
+  
+
+
+
+time_seq_df$Done.by = factor(time_seq_df$Done.by, levels = c("Exp6", "Alex", "Divyaj", "mitigation3"))
+
+model.1 = lm(OptimalAccuracy~Trial*Done.by, data = time_seq_df)
+model.2 = lmer(OptimalAccuracy~Trial*Done.by + Done.by + (1|Participant.Private.ID), data = time_seq_df)
+
+lme4:::anova.merMod(model.2, model.1)
+
+plot_model(model.1, type = "pred", terms = c("Trial","Done.by"))+
+  theme_classic() +
+  labs(
+    x = "Trial",
+    y = "Accuracy",
+    colour = "Experiment",
+    title = ''
+  ) + scale_colour_discrete(labels = c("Exp6" = "Control",
+                                       "Alex" = "Mitigation 1",
+                                       "Divyaj" = "Mitigation 2",
+                                       "mitigation3" = "Mitigation 3"))
+
+  
+
 

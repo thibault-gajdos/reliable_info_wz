@@ -22,6 +22,11 @@ exp6_dr3e = rbind(exp6_dr3e_v11, exp6_dr3e_v10)
 exp6_t5fq = rbind(exp6_t5fq_v10, exp6_t5fq_v11)
 
 
+mitigation3_a5xi = read.csv('data/mitigation3/data_exp_273055-v7_task-a5xi.csv')
+mitigation3_sxrr = read.csv('data/mitigation3/data_exp_273055-v7_task-sxrr.csv')
+
+
+
 # sum(exp6_dr3e$Task=='response') + sum(exp6_t5fq$Task=='response')
 
 # length(na.exclude(unique(alex_czkz$Participant.Private.ID))) # 17
@@ -60,12 +65,19 @@ colnames(df_exp6)=c('Participant.Private.ID','Experiment.Name')
 df_exp6 = data.frame(df_exp6)
 df_exp6$Done.by = 'Exp6'
 
+df_mitigation3 = rbind(cbind(na.exclude(unique(mitigation3_a5xi$Participant.Private.ID)),'a5xi'),
+                       cbind(na.exclude(unique(mitigation3_sxrr$Participant.Private.ID)),'sxrr'))
+colnames(df_mitigation3)=c('Participant.Private.ID','Experiment.Name')
+df_mitigation3 = data.frame(df_mitigation3)
+df_mitigation3$Done.by = 'mitigation3'
+
 
 
 df_participant_experiment = rbind(df_Alex, 
                                   df_Djvyaj,
                                   # df_exp1,
-                                  df_exp6)
+                                  df_exp6,
+                                  df_mitigation3)
 
 
 ######## Get only response and slider, remove irrelevant columns
@@ -134,6 +146,18 @@ exp6_clean = Button0Blue_flip(exp6_clean)
 # exp1_clean$randomiser.475f[button0blue_indx] = 'Button0Red'
 
 
+mitigation3_a5xi$Experiment.Name = 'a5xi'
+mitigation3_sxrr$Experiment.Name = 'sxrr'
+mitigation3_a5xi$PosteriorBlue = mitigation3_a5xi$PosteriorBlue - mitigation3_a5xi$PosteriorRed
+mitigation3_sxrr$PosteriorBlue = mitigation3_sxrr$PosteriorBlue - mitigation3_sxrr$PosteriorRed
+
+mitigation3_clean = rbind(mitigation3_a5xi[mitigation3_a5xi$Task=='response'|mitigation3_a5xi$Task=='slider'|mitigation3_a5xi$Task=='feedback',c(13,29,39,40,42,45,46,51,56,57,59,60)],
+                          mitigation3_sxrr[mitigation3_sxrr$Task=='response'|mitigation3_sxrr$Task=='slider'|mitigation3_a5xi$Task=='feedback',c(13,29,39,40,42,45,46,51,56,57,59,60)])
+mitigation3_clean$Done.by = 'mitigation3'
+mitigation3_clean = Button0Blue_flip(mitigation3_clean)
+
+
+
 ### Get BDT for exp1 or exp6
 
 # results = lapply(exp1_clean$Stimulus.Info, function(txt) {
@@ -198,9 +222,7 @@ exp6_clean$Experiment.Name = Experiment.Name
 
 exp6_clean$Done.by = 'Exp6'
 
-data_clean = rbind(alex_clean, divyaj_clean, exp6_clean)
-
-
+data_clean = rbind(alex_clean, divyaj_clean, exp6_clean, mitigation3_clean)
 
 ######## Get json information
 
