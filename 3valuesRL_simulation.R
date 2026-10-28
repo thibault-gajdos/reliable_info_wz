@@ -11,7 +11,7 @@ set.seed(1)
 
 params <- list(
   delta      = 0.02,             # learning rate
-  theta      = 1,                # inverse temperature of the choice rule
+  theta      = 10,                # inverse temperature of the choice rule
   lambda     = 0,                # recency weighting of samples (0 = equal weights)
   n_trial    = 9600,
   n_info     = 6,                # samples per trial
@@ -25,10 +25,11 @@ params <- list(
   feedback_target = "optimal",
   
   # What the prediction error subtracts from the reward:
-  #   "choice" - posterior belief in the chosen colour
+  #   "posterior_belief" - posterior belief in the chosen colour
+  #   "choice_prob" - final probability of choosing the chosen colour
   #   "policy" - belief averaged over the choice policy:
   #              belief_blue * choice_prob_blue + (1 - belief_blue) * (1 - choice_prob_blue)
-  expectation_source = "policy"
+  expectation_source = "choice_prob"
 )
 
 # Plot colours per level. Levels without an entry get an automatic colour.
@@ -94,7 +95,7 @@ simulate_learning <- function(params, trials) {
                    stop("Unknown feedback_target: ", params$feedback_target)
   )
   
-  if (!params$expectation_source %in% c("choice", "policy")) {
+  if (!params$expectation_source %in% c("posterior_belief", "choice_prob", "policy")) {
     stop("Unknown expectation_source: ", params$expectation_source)
   }
   
@@ -153,7 +154,8 @@ simulate_learning <- function(params, trials) {
     c_prob <- choice_prob_blue[t]
     
     expected_reward[t] <- switch(params$expectation_source,
-                                 choice = if (choice[t] == "Blue") b else 1 - b,
+                                 posterior_belief = if (choice[t] == "Blue") b else 1 - b,
+                                 choice_prob = if (choice[t] == "Blue") c_prob else 1 - c_prob,
                                  policy = b * c_prob + (1 - b) * (1 - c_prob)
     )
     
