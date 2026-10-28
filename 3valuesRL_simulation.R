@@ -1,536 +1,321 @@
+## ============================================================
 ## Simulation to verify the learning model
+## ============================================================
 
-library(dplyr)
-
-# parameter setup
-
-delta  = 0.02
-theta  = 5
-lambda = 0
-kappa = 0 # decay
-
-n_trial <- 60000
+set.seed(1)
 
 
-# trials generation
-logodds <- function(a){
-  return(log(a/(1-a)))
+## ============================================================
+## Settings
+## ============================================================
+
+params <- list(
+  delta      = 0.02,             # learning rate
+  theta      = 1,                # inverse temperature of the choice rule
+  lambda     = 0,                # recency weighting of samples (0 = equal weights)
+  n_trial    = 9600,
+  n_info     = 6,                # samples per trial
+  levels     = c(50, 55, 65),    # sample reliability (% of samples matching the stimulus)
+  init_value = 0.1,              # starting value for every level
+  
+  # What the choice is compared against to give reward:
+  #   "optimal"      - the ideal observer's answer
+  #   "correct"      - the true stimulus
+  #   "optimal_prob" - to be implemented
+  feedback_target = "optimal",
+  
+  # What the prediction error subtracts from the reward:
+  #   "choice" - posterior belief in the chosen colour
+  #   "policy" - belief averaged over the choice policy:
+  #              belief_blue * choice_prob_blue + (1 - belief_blue) * (1 - choice_prob_blue)
+  expectation_source = "policy"
+)
+
+# Plot colours per level. Levels without an entry get an automatic colour.
+level_colors <- c("50" = "#0099FF", "55" = "#00CC33", "65" = "#009933")
+
+
+## ============================================================
+## Trial generation
+## ============================================================
+
+# Returns the stimuli for all trials at once:
+#   stimulus  - true colour per trial
+#   color_mat - n_trial x n_info matrix of sample colours
+#   level_mat - n_trial x n_info matrix of sample levels
+#   optimal   - ideal observer's answer (ties broken at random)
+generate_trials <- function(n_trial, n_info, levels) {
+  
+  stimulus    <- sample(c("Red", "Blue"), n_trial, replace = TRUE)
+  false_color <- ifelse(stimulus == "Red", "Blue", "Red")
+  
+  level_mat <- matrix(sample(levels, n_trial * n_info, replace = TRUE), nrow = n_trial)
+  
+  # Each sample shows the true colour with probability level / 100
+  matches   <- matrix(runif(n_trial * n_info), nrow = n_trial) < level_mat / 100
+  color_mat <- ifelse(matches, stimulus, false_color)
+  
+  # Ideal observer: sum of signed log-odds (positive favours Blue)
+  sign_blue  <- ifelse(color_mat == "Blue", 1, -1)
+  ideal_diff <- rowSums(sign_blue * qlogis(level_mat / 100))
+  
+  is_tie  <- abs(ideal_diff) < 1e-10   # tolerance avoids floating-point false non-ties
+  optimal <- ifelse(ideal_diff > 0, "Blue", "Red")
+  optimal[is_tie] <- sample(c("Blue", "Red"), sum(is_tie), replace = TRUE)
+  
+  list(
+    stimulus  = stimulus,
+    color_mat = color_mat,
+    level_mat = level_mat,
+    optimal   = optimal
+  )
 }
 
 
-generate_trial <- function(
-    n_info = 6,
-    levels = c(50,55,65),
-    probs = c(0.5,0.55,0.65)
-){
-  stimulus <- sample(c('Red','Blue'),1)
-  false.color <- setdiff(c('Red','Blue'), stimulus)
+## ============================================================
+## Learning model
+## ============================================================
+
+simulate_learning <- function(params, trials) {
   
-  level <- sample(levels,n_info,replace=TRUE)
-  # level <- sample(c(65, 65),n_info,replace=TRUE)
-  # change 1
-  p <- level/100
+  ## --- Check settings ---------------------------------------
   
-  color <- ifelse(
-    runif(length(p)) < p,
-    stimulus,
-    false.color
+  if (ncol(trials$color_mat) != params$n_info) {
+    stop("trials were generated with a different n_info than params$n_info")
+  }
+  
+  if (params$feedback_target == "optimal_prob") {
+    stop("feedback_target = 'optimal_prob' is to be implemented")
+  }
+  
+  target <- switch(params$feedback_target,
+                   optimal = trials$optimal,
+                   correct = trials$stimulus,
+                   stop("Unknown feedback_target: ", params$feedback_target)
   )
   
-  # color <- sample(c("Blue","Red"),n_info,replace=TRUE)
+  if (!params$expectation_source %in% c("choice", "policy")) {
+    stop("Unknown expectation_source: ", params$expectation_source)
+  }
   
+  ## --- Setup ------------------------------------------------
   
-  blue_evidence <- sum(logodds(p[color=="Blue"]))
-  red_evidence  <- sum(logodds(p[color=="Red"]))
+  n_trial     <- length(trials$stimulus)
+  level_names <- as.character(params$levels)
   
-  optimal <-
-    ifelse(
-      blue_evidence > red_evidence,
-      "Blue",
-      ifelse(
-        red_evidence > blue_evidence,
-        "Red",
-        sample(c("Blue","Red"),1)
-      )
+  # One value per level, labelled by level
+  V <- setNames(rep(params$init_value, length(level_names)), level_names)
+  
+  # Weight of each sample position (the last sample has weight 1)
+  discount <- exp(params$lambda * (seq_len(params$n_info) - params$n_info))
+  
+  # Preallocated outputs
+  value_hist  <- matrix(NA_real_, n_trial, length(level_names),
+                        dimnames = list(NULL, level_names))
+  credit_hist <- value_hist
+  
+  choice                <- character(n_trial)
+  reward                <- numeric(n_trial)
+  expected_reward       <- numeric(n_trial)
+  pe                    <- numeric(n_trial)
+  blue_evidence         <- numeric(n_trial)
+  red_evidence          <- numeric(n_trial)
+  posterior_belief_blue <- numeric(n_trial)
+  choice_prob_blue      <- numeric(n_trial)
+  
+  ## --- Trial loop -------------------------------------------
+  
+  for (t in seq_len(n_trial)) {
+    
+    value_hist[t, ] <- V
+    
+    sample_levels <- as.character(trials$level_mat[t, ])
+    sample_colors <- trials$color_mat[t, ]
+    
+    ## Evidence accumulation
+    weighted_values  <- discount * V[sample_levels]
+    blue_evidence[t] <- sum(weighted_values[sample_colors == "Blue"])
+    red_evidence[t]  <- sum(weighted_values[sample_colors == "Red"])
+    evidence_diff    <- blue_evidence[t] - red_evidence[t]
+    
+    ## Belief and choice
+    # posterior_belief_blue is not affected by theta; choice_prob_blue is
+    posterior_belief_blue[t] <- plogis(evidence_diff)
+    choice_prob_blue[t]      <- plogis(params$theta * evidence_diff)
+    
+    choice[t] <- if (runif(1) < choice_prob_blue[t]) "Blue" else "Red"
+    
+    ## Reward
+    reward[t] <- as.numeric(choice[t] == target[t])
+    
+    ## Prediction error
+    b <- posterior_belief_blue[t]
+    c_prob <- choice_prob_blue[t]
+    
+    expected_reward[t] <- switch(params$expectation_source,
+                                 choice = if (choice[t] == "Blue") b else 1 - b,
+                                 policy = b * c_prob + (1 - b) * (1 - c_prob)
     )
+    
+    pe[t] <- reward[t] - expected_reward[t]
+    
+    ## Credit assignment
+    # +1 for each sample agreeing with the choice, -1 otherwise, summed per level
+    contribution <- ifelse(sample_colors == choice[t], 1, -1)
+    credit <- vapply(level_names,
+                     function(l) sum(contribution[sample_levels == l]),
+                     numeric(1))
+    
+    total_credit <- sum(abs(credit))
+    if (total_credit > 0) credit <- credit / total_credit
+    
+    credit_hist[t, ] <- credit
+    
+    ## Value update
+    V <- V + params$delta * credit * pe[t]
+  }
   
-  out <- c(
-    Stimulus=stimulus,
-    
-    setNames(color,paste0("Color",1:n_info)),
-    
-    setNames(level,paste0("Prob",1:n_info)),
-    
-    Optimal=optimal
-    
+  ## --- Assemble output (wide format) ------------------------
+  
+  n_info <- params$n_info
+  
+  out <- data.frame(
+    Trial    = seq_len(n_trial),
+    Stimulus = trials$stimulus,
+    setNames(as.data.frame(trials$color_mat), paste0("Color", seq_len(n_info))),
+    setNames(as.data.frame(trials$level_mat), paste0("Prob",  seq_len(n_info))),
+    Optimal  = trials$optimal,
+    setNames(as.data.frame(value_hist), paste0("Value", level_names)),
+    Choice              = choice,
+    Reward              = reward,
+    ExpectedReward      = expected_reward,
+    PE                  = pe,
+    BlueEvidence        = blue_evidence,
+    RedEvidence         = red_evidence,
+    PosteriorBeliefBlue = posterior_belief_blue,
+    ChoiceProbBlue      = choice_prob_blue,
+    setNames(as.data.frame(credit_hist), paste0("Credit", level_names)),
+    OptimalAccuracy     = as.numeric(choice == trials$optimal),
+    ChoiceAccuracy      = as.numeric(choice == trials$stimulus),
+    stringsAsFactors    = FALSE
   )
   
-  return(out)
-
-}
-
-trial_df <-
-  
-  as.data.frame(
-    
-    t(
-      
-      replicate(
-        n_trial,
-        generate_trial(),
-        simplify=TRUE
-      )
-      
-    ),
-    
-    stringsAsFactors = FALSE
-    
-  )
-
-
-trial_df$Trial <- 1:n_trial
-
-trial_df <- trial_df |>
-  dplyr::relocate(Trial)
-
-trial_df$Value50 <- NA
-trial_df$Value55 <- NA
-trial_df$Value65 <- NA
-
-trial_df$Choice <- NA
-trial_df$Reward <- NA
-trial_df$PE <- NA
-
-trial_df$BlueEvidence <- NA
-trial_df$RedEvidence <- NA
-trial_df$PBlue <- NA
-
-trial_df$Credit50 <- NA
-trial_df$Credit55 <- NA
-trial_df$Credit65 <- NA
-
-trial_df$Value50[1] <- 0.1
-trial_df$Value55[1] <- 0.1
-trial_df$Value65[1] <- 0.1
-
-## feedback ~ "optimal", "correct", "optimal_prob"
-feedback = "optimal"
-
-
-
-for(t in 1:nrow(trial_df)){
-  
-  ## --------------------------
-  ## Current latent values
-  ## --------------------------
-  
-  V50 <- trial_df$Value50[t]
-  V55 <- trial_df$Value55[t]
-  V65 <- trial_df$Value65[t]
-  
-  blueEvidence <- 0
-  redEvidence  <- 0
-  
-  
-  ## --------------------------
-  ## Evidence accumulation
-  ## --------------------------
-  
-  for(i in 1:6){
-    
-    level <- trial_df[t,paste0("Prob",i)]
-    color <- trial_df[t,paste0("Color",i)]
-    
-    value <- switch(as.character(level),
-                    "50" = V50,
-                    "55" = V55,
-                    "65" = V65)
-    
-    discount <- exp(lambda*(i-6))
-    
-    if(color=="Blue"){
-      
-      blueEvidence <- blueEvidence +
-        discount*value
-      
-    }else{
-      
-      redEvidence <- redEvidence +
-        discount*value
-      
-    }
-    
-  }
-  
-  trial_df$BlueEvidence[t] <- blueEvidence
-  trial_df$RedEvidence[t]  <- redEvidence
-  
-  
-  ## --------------------------
-  ## Choice
-  ## --------------------------
-  
-  # pBlue <-
-  #   plogis(blueEvidence-redEvidence)
-  
-  pBlue <-
-    plogis(blueEvidence - redEvidence) # change 7
-  
-  trial_df$PBlue[t] <- pBlue
-  
-  pBlue_decision = plogis((blueEvidence - redEvidence)*theta)
-  
-  # pBlue = pBlue_decision ##### change_evidence
-  
-  choice <- sample(c("Blue", "Red"), 1, prob = c(pBlue_decision, 1 - pBlue_decision))
-  # plogis(theta*(blueEvidence-redEvidence))
-  
-  # change 3
-  
-  # choice <- ifelse(
-  #   pBlue>=0.5,
-  #   "Blue",
-  #   "Red"
-  # )
-
-  trial_df$Choice[t] <- choice
-  
-  
-  ## --------------------------
-  ## Reward
-  ## --------------------------
-  
-  
-  ######################## change_reward
-  if(feedback == "optimal"){
-    reward <- ifelse(
-      choice==
-        trial_df$Optimal[t], # change 5
-        # trial_df$Stimulus[t],
-      1,
-      0
-    )
-  }else if(feedback == "correct"){
-    reward <- ifelse(
-      choice==
-        trial_df$Stimulus[t],
-      1,
-      0
-    )
-  }
-  
-  
-
-  trial_df$Reward[t] <- reward
-  
-  
-  ## --------------------------
-  ## Prediction Error
-  ## --------------------------
-  
-  if(feedback == "optimal"){
-    pCorrect <-
-      ifelse(
-        choice=="Blue",
-        # trial_df$Optimal[t]=="Blue",
-        pBlue,
-        1-pBlue
-      )
-  }else if(feedback == "correct"){
-    pCorrect <-
-      ifelse(
-        choice=="Blue",
-        # trial_df$Stimulus[t]=="Blue",
-        pBlue,
-        1-pBlue
-      )
-  }
-
-
-  ##### in one trial, pBlue = 0.6
-  ##### I choose blue
-  ##### but the feedback says the correct colour is red
-  ##### reward = 0
-  ##### pCorrect = 0.4
-  ##### PE = -0.4
-
-
-  
-  PE <- reward-pCorrect
-  
-  # PE <- ifelse(
-  #   choice==trial_df$Optimal[t],
-  #   0.1,
-  #   -0.1
-  # )
-  
-  # change 4
-
-  
-  trial_df$PE[t] <- PE
-  
-  
-  ## --------------------------
-  ## Credit Assignment
-  ## --------------------------
-  
-  credit50 <- 0
-  credit55 <- 0
-  credit65 <- 0
-  
-  
-  for(i in 1:6){
-    
-    level <- trial_df[t,paste0("Prob",i)]
-    color <- trial_df[t,paste0("Color",i)]
-    
-    
-    color==choice
-    contribution <-
-      ifelse(
-        color==
-          # trial_df$Optimal[t],
-          choice,    # change 2
-        1,
-        -1
-      )
-    
-    if(level==50){
-      
-      credit50 <- credit50+contribution
-      
-    }else if(level==55){
-      
-      credit55 <- credit55+contribution
-      
-    }else{
-      
-      credit65 <- credit65+contribution
-      
-    }
-    
-  }
-  # change 6
-  
-  # credit50 = credit50 * abs(trial_df$Value50[t])
-  # credit55 = credit55 * abs(trial_df$Value55[t])
-  # credit65 = credit65 * abs(trial_df$Value65[t])
-  
-
-  
-  totalCredit <-
-    abs(credit50)+
-    abs(credit55)+
-    abs(credit65)
-  
-  
-  if(totalCredit>0){
-    
-    credit50 <- credit50/totalCredit
-    credit55 <- credit55/totalCredit
-    credit65 <- credit65/totalCredit
-    
-  }else{
-    
-    credit50 <- 0
-    credit55 <- 0
-    credit65 <- 0
-    
-  }
-  
-  trial_df$Credit50[t] <- credit50
-  trial_df$Credit55[t] <- credit55
-  trial_df$Credit65[t] <- credit65
-  
-  
-  ## --------------------------
-  ## Value Update
-  ## --------------------------
-  
-  V50_new <-
-    V50 * (1-kappa)+
-    delta*
-    credit50*
-    PE
-  
-  V55_new <-
-    V55 * (1-kappa)+
-    delta*
-    credit55*
-    PE
-  
-  V65_new <-
-    V65 * (1-kappa)+
-    delta*
-    credit65*
-    PE
-  
-  
-  ## --------------------------
-  ## Next trial
-  ## --------------------------
-  
-  if(t<nrow(trial_df)){
-    
-    trial_df$Value50[t+1] <- V50_new
-    trial_df$Value55[t+1] <- V55_new
-    trial_df$Value65[t+1] <- V65_new
-    
-  }
-  
+  out
 }
 
 
-trial_df$Value50[n_trial]
-trial_df$Value55[n_trial]
-trial_df$Value65[n_trial]
+## ============================================================
+## Plotting helpers
+## ============================================================
 
-logodds(0.65)/logodds(0.55)
-trial_df$Value65[n_trial]/trial_df$Value55[n_trial]
+get_level_colors <- function(level_names) {
+  cols <- unname(level_colors[level_names])
+  missing <- is.na(cols)
+  if (any(missing)) cols[missing] <- hcl.colors(sum(missing), "Dark 3")
+  setNames(cols, level_names)
+}
+
+# Trailing rolling mean: value at t is the mean of x[(t - window + 1):t]
+roll_mean <- function(x, window) {
+  as.numeric(stats::filter(x, rep(1 / window, window), sides = 1))
+}
+
+# Learned values per level, with the ideal log-odds as dotted lines
+plot_values <- function(df, levels) {
+  level_names <- as.character(levels)
+  cols    <- get_level_colors(level_names)
+  targets <- qlogis(levels / 100)
+  value_cols <- paste0("Value", level_names)
+  
+  y_range <- range(unlist(df[value_cols]), targets, na.rm = TRUE)
+  
+  plot(NA, xlim = range(df$Trial), ylim = y_range, xlab = "Trial", ylab = "Value")
+  for (i in seq_along(level_names)) {
+    lines(df$Trial, df[[value_cols[i]]], col = cols[i])
+    abline(h = targets[i], col = cols[i], lty = 3)
+  }
+  legend("topleft", legend = value_cols, col = cols, lty = 1)
+}
+
+# Ratio of two learned values against the ideal log-odds ratio
+plot_value_ratio <- function(df, numerator, denominator) {
+  ratio  <- df[[paste0("Value", numerator)]] / df[[paste0("Value", denominator)]]
+  target <- qlogis(numerator / 100) / qlogis(denominator / 100)
+  
+  plot(df$Trial, ratio, type = "l", ylim = range(ratio, target, na.rm = TRUE),
+       xlab = "Trial", ylab = paste0("Value", numerator, " / Value", denominator))
+  abline(h = target, lty = 3)
+}
+
+# Rolling accuracy against the optimal answer and against the true stimulus
+plot_accuracy <- function(df, window = 30) {
+  plot(df$Trial, roll_mean(df$ChoiceAccuracy, window), type = "l", col = "red",
+       ylim = c(0, 1), xlab = "Trial (window end)", ylab = "Accuracy")
+  lines(df$Trial, roll_mean(df$OptimalAccuracy, window), col = "blue")
+  legend("bottomright", legend = c("Optimality", "Choice"),
+         col = c("blue", "red"), lty = 1)
+}
+
+# Posterior belief in Blue, coloured by the optimal answer
+plot_belief_by_optimal <- function(df) {
+  is_blue <- df$Optimal == "Blue"
+  plot(df$Trial[is_blue], df$PosteriorBeliefBlue[is_blue], col = "blue",
+       ylim = c(0, 1), xlab = "Trial", ylab = "Posterior belief (Blue)")
+  points(df$Trial[!is_blue], df$PosteriorBeliefBlue[!is_blue], col = "red")
+}
+
+# Credit per level over trials; optionally multiplied by the PE
+plot_credit <- function(df, levels, xlim, weight_by_pe = FALSE) {
+  level_names <- as.character(levels)
+  cols <- get_level_colors(level_names)
+  weight <- if (weight_by_pe) df$PE else 1
+  
+  plot(NA, xlim = xlim, ylim = c(-1, 1), xlab = "Trial",
+       ylab = if (weight_by_pe) "Credit x PE" else "Credit")
+  for (i in seq_along(level_names)) {
+    y <- df[[paste0("Credit", level_names[i])]] * weight
+    lines(df$Trial, y, type = "o", col = cols[i])
+  }
+  legend("topright", legend = paste0("Credit", level_names), col = cols, lty = 1)
+}
 
 
+## ============================================================
+## Run
+## ============================================================
+
+trials <- generate_trials(params$n_trial, params$n_info, params$levels)
+sim_df <- simulate_learning(params, trials)
+
+# Final values
+final_values <- unlist(sim_df[nrow(sim_df), paste0("Value", params$levels)])
+print(final_values)
+
+# Learned vs ideal ratio for the two highest levels
+top_two <- sort(params$levels, decreasing = TRUE)[1:2]
+print(c(
+  ideal   = qlogis(top_two[1] / 100) / qlogis(top_two[2] / 100),
+  learned = final_values[[paste0("Value", top_two[1])]] /
+    final_values[[paste0("Value", top_two[2])]]
+))
 
 
-# par(mfrow = c(2,2))
-# plot(trial_df$Trial, trial_df$Value50, type = 'l', ylim = c(-0.3,1))
-# plot(trial_df$Trial, trial_df$Value55, type = 'l', ylim = c(-0.3,1))
-# plot(trial_df$Trial, trial_df$Value65, type = 'l', ylim = c(-0.3,1))
-# plot(trial_df$Trial, trial_df$Value65/trial_df$Value55, type = 'l', ylim = c(0,6))
-
-
-# par(mfrow = c(2,2))
-# plot(trial_df$Trial, trial_df$Value50, type = 'l')
-# plot(trial_df$Trial, trial_df$Value55, type = 'l')
-# plot(trial_df$Trial, trial_df$Value65, type = 'l')
-# plot(trial_df$Trial, trial_df$Value65/trial_df$Value55, type = 'l')
-
+## ============================================================
+## Plots
+## ============================================================
 
 par(mfrow = c(1, 3))
+plot_values(sim_df, params$levels)
+plot_value_ratio(sim_df, top_two[1], top_two[2])
+plot_accuracy(sim_df, window = 30)
 
-y_range <- range(trial_df$Value50, trial_df$Value55, trial_df$Value65, c(logodds(0.65),logodds(0.55),logodds(0.5)))
+par(mfrow = c(1, 3))
+hist(sim_df$PE, breaks = 30, main = "Prediction error", xlab = "PE")
+plot(sim_df$Trial, sim_df$PE, xlab = "Trial", ylab = "PE")
+plot_belief_by_optimal(sim_df)
 
-
-# First plot: all three lines together
-plot(trial_df$Trial, trial_df$Value65, type = 'l', col = '#009933',
-     ylim = y_range, ylab = 'Value', xlab = 'Trial')
-lines(trial_df$Trial, trial_df$Value55, col = '#00CC33')
-lines(trial_df$Trial, trial_df$Value50, col = '#0099FF')
-
-abline(h=logodds(0.65), col = '#009933', lty = 3)
-abline(h=logodds(0.55), col = '#00CC33', lty = 3)
-abline(h=logodds(0.5), col = '#0099FF', lty = 3)
-
-
-legend('topleft', legend = c('Value50', 'Value55', 'Value65'),
-       col = c('#0099FF', '#00CC33', '#009933'), lty = 1)
-
-# Second plot: ratio
-
-y_range <- range(trial_df$Value65/trial_df$Value55, c(logodds(0.65)/logodds(0.55)))
-
-plot(trial_df$Trial, trial_df$Value65 / trial_df$Value55, ylim = y_range, type = 'l',
-     ylab = 'Value65 / Value55', xlab = 'Trial')
-abline(h = logodds(0.65)/logodds(0.55), lty = 3)
-
-
-
-trial_df$OptimalAccuracy = ifelse(
-  trial_df$Optimal==trial_df$Choice, 1, 0 
-) 
-
-trial_df$ChoiceAccuracy = ifelse(
-  trial_df$Stimulus==trial_df$Choice, 1, 0 
-) 
-
-
-window_length <- 30
-
-accuracy_window_df <- trial_df %>%
-  filter(Trial >= 1) %>%
-  group_modify(function(df, key) {
-    
-    max_trial <- max(df$Trial, na.rm = TRUE)
-    
-    window_start <- 1:(max_trial - window_length + 1)
-    
-    data.frame(
-      Window_start = window_start,
-      Window_end = window_start + window_length - 1,
-      OptimalAccuracy = sapply(
-        window_start,
-        function(start) {
-          mean(
-            df$OptimalAccuracy[
-              df$Trial >= start &
-                df$Trial <= start + window_length - 1
-            ],
-            na.rm = TRUE
-          )
-        }
-      ),
-      ChoiceAccuracy = sapply(
-        window_start,
-        function(start) {
-          mean(
-            df$ChoiceAccuracy[
-              df$Trial >= start &
-                df$Trial <= start + window_length - 1
-            ],
-            na.rm = TRUE
-          )
-        }
-      )
-    )
-  })
-
-
-
-
-plot(accuracy_window_df$Window_end, accuracy_window_df$ChoiceAccuracy, type = 'l',
-     ylab = 'Choice Accuracy', xlab = 'Window End', ylim = c(0,1), col = 'red')
-
-
-lines(accuracy_window_df$Window_end, accuracy_window_df$OptimalAccuracy, type = 'l', col = 'blue')
-legend('bottomright', legend = c('Optimality', 'Choice'),
-       col = c('blue', 'red'), lty = 1)
-
-# plot(trial_df$Trial, trial_df$PE, type = 'l',
-#      ylab = 'Prediction Error', xlab = 'Trial', ylim = c(0,1))
-par(mfrow = c(1,3))
-
-hist(trial_df$PE, breaks = 30)
-plot(trial_df$Trial, trial_df$PE)
-
-
-# plot(trial_df$Trial, trial_df$PBlue)
-
-plot(trial_df$Trial[which(trial_df$Optimal=='Blue')], trial_df$PBlue[which(trial_df$Optimal=='Blue')], col = 'blue', ylim = c(0,1))
-points(trial_df$Trial[which(trial_df$Optimal=='Red')], trial_df$PBlue[which(trial_df$Optimal=='Red')], col = 'red')
-
-
-
-plot(trial_df$Trial, trial_df$Credit65, type = 'lo', col = '#009933', ylab = 'Value', xlab = 'Trial', xlim = c(0,20))
-lines(trial_df$Trial, trial_df$Credit55, col = '#00CC33')
-lines(trial_df$Trial, trial_df$Credit50, col = '#0099FF')
-
-
-plot(trial_df$Trial, trial_df$Credit65, pch = 1, col = '#009933', ylab = 'Value', xlab = 'Trial', xlim = c(0,20))
-points(trial_df$Trial, trial_df$Credit55, col = '#00CC33')
-points(trial_df$Trial, trial_df$Credit50, col = '#0099FF')
-lines(trial_df$Trial, trial_df$Credit65, col = '#009933')
-lines(trial_df$Trial, trial_df$Credit55, col = '#00CC33')
-lines(trial_df$Trial, trial_df$Credit50, col = '#0099FF')
-
-
-
-plot(trial_df$Trial, trial_df$Credit65 * trial_df$PE, pch = 1, col = '#009933', ylab = 'Value', xlab = 'Trial', xlim = c(0,20), ylim = c(-1,1))
-points(trial_df$Trial, trial_df$Credit55 * trial_df$PE, col = '#00CC33')
-points(trial_df$Trial, trial_df$Credit50 * trial_df$PE, col = '#0099FF')
-lines(trial_df$Trial, trial_df$Credit65 * trial_df$PE, col = '#009933')
-lines(trial_df$Trial, trial_df$Credit55 * trial_df$PE, col = '#00CC33')
-lines(trial_df$Trial, trial_df$Credit50 * trial_df$PE, col = '#0099FF')
-
-
-plot(trial_df$Trial, trial_df$Credit55 * trial_df$PE, pch = 1, col = '#00CC33', ylab = 'Value', xlab = 'Trial', xlim = c(0,2000), ylim = c(-1,1))
-lines(trial_df$Trial, trial_df$Credit55 * trial_df$PE, col = '#00CC33')
+par(mfrow = c(1, 3))
+plot_credit(sim_df, params$levels, xlim = c(0, 20))
+plot_credit(sim_df, params$levels, xlim = c(0, 20), weight_by_pe = TRUE)
+plot_credit(sim_df, "55", xlim = c(0, 2000), weight_by_pe = TRUE)
 
