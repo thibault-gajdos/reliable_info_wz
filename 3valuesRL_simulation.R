@@ -13,7 +13,7 @@ params <- list(
   delta      = 0.02,             # learning rate
   theta      = 10,                # inverse temperature of the choice rule
   lambda     = 0,                # recency weighting of samples (0 = equal weights)
-  n_trial    = 9600,
+  n_trial    = 19600,            # default 9600
   n_info     = 6,                # samples per trial
   levels     = c(50, 55, 65),    # sample reliability (% of samples matching the stimulus)
   init_value = 0.1,              # starting value for every level
@@ -29,7 +29,8 @@ params <- list(
   #   "choice_prob" - final probability of choosing the chosen colour
   #   "policy" - belief averaged over the choice policy:
   #              belief_blue * choice_prob_blue + (1 - belief_blue) * (1 - choice_prob_blue)
-  expectation_source = "choice_prob"
+  expectation_source = "policy",
+  value_bound = 3.8
 )
 
 # Plot colours per level. Levels without an entry get an automatic colour.
@@ -88,6 +89,10 @@ simulate_learning <- function(params, trials) {
   if (params$feedback_target == "optimal_prob") {
     stop("feedback_target = 'optimal_prob' is to be implemented")
   }
+  if (!is.numeric(params$value_bound) || length(params$value_bound) != 1 ||
+      !isTRUE(params$value_bound > 0)) {
+    stop("value_bound must be a single positive number (use Inf for no bound)")
+  }
   
   target <- switch(params$feedback_target,
                    optimal = trials$optimal,
@@ -106,6 +111,10 @@ simulate_learning <- function(params, trials) {
   
   # One value per level, labelled by level
   V <- setNames(rep(params$init_value, length(level_names)), level_names)
+  
+  # Keep values within the bound
+  clip_values <- function(x) pmin(pmax(x, -params$value_bound), params$value_bound)
+  V <- clip_values(V)
   
   # Weight of each sample position (the last sample has weight 1)
   discount <- exp(params$lambda * (seq_len(params$n_info) - params$n_info))
@@ -174,7 +183,8 @@ simulate_learning <- function(params, trials) {
     credit_hist[t, ] <- credit
     
     ## Value update
-    V <- V + params$delta * credit * pe[t]
+    # V <- V + params$delta * credit * pe[t]
+    V <- clip_values(V + params$delta * credit * pe[t])
   }
   
   ## --- Assemble output (wide format) ------------------------
