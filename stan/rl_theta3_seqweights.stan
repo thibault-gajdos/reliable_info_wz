@@ -64,8 +64,8 @@ model {
   // -------------------------------------------------------
 
   // mu_pr ~ normal(0, 1);
-  // tighter prior on delta mean to push toward smaller learning rates
-  mu_pr[1] ~ normal(0, 0.5);
+  // delta group mean: centred ~0.055, 95% range ~0.005–0.27
+  mu_pr[1] ~ normal(-1.6, 0.5);
   mu_pr[2] ~ normal(0, 0.5);
   sigma[1] ~ normal(0, 0.2);             // delta SD
   // sigma[2] ~ normal(0, 0.2);             // theta SD
@@ -135,7 +135,7 @@ model {
       // scaled_evidence = scaled_evidence - max(scaled_evidence);
       // vector[2] val = softmax(scaled_evidence);
       
-      vector[2] val_decision = softmax(1*evidence);
+      vector[2] val_decision = softmax(3*evidence);
       vector[2] val_PE = softmax(evidence);
       
       choice[n,t] ~ categorical(val_decision);
@@ -146,8 +146,8 @@ model {
       // -------------------------------------------------------
 
       real reward    = (choice[n,t] == feedback[n,t]) ? 1.0 : 0.0;
-      real pCorrect  = val_PE[feedback[n,t]];             // this should not be modulated by theta
-      real PE        = reward - pCorrect;
+      real pChosen   = val_PE[choice[n,t]];               // belief in chosen colour, not modulated by theta
+      real PE        = reward - pChosen;
 
 
       // -------------------------------------------------------
@@ -268,7 +268,7 @@ generated quantities {
         // scaled_evidence = scaled_evidence - max(scaled_evidence);
         // vector[2] val = softmax(scaled_evidence);
         
-        vector[2] val_decision = softmax(1*evidence);
+        vector[2] val_decision = softmax(3*evidence);
         vector[2] val_PE = softmax(evidence);
 
         log_lik[n,t] = categorical_lpmf(choice[n,t] | val_decision);
@@ -276,8 +276,8 @@ generated quantities {
 
         // value update — must mirror model block exactly
         real reward   = (choice[n,t] == feedback[n,t]) ? 1.0 : 0.0;
-        real pCorrect = val_PE[feedback[n,t]];
-        real PE       = reward - pCorrect;
+        real pChosen  = val_PE[choice[n,t]];
+        real PE       = reward - pChosen;
 
         real credit50 = 0;
         real credit55 = 0;
